@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model DraftSession {
+  id          String   @id @default(cuid())
+  userTeamId  String
+  leagueMode  String   @default("nfl")
+  status      String   @default("drafting")
+  picksJson   Json     // full picks array
+  tradesJson  Json     @default("[]")
+  gradesJson  Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GameSession {
+  id           String   @id @default(cuid())
+  homeTeamId   String
+  awayTeamId   String
+  leagueMode   String   @default("nfl") // nfl | ncaa
+  homeScore    Int      @default(0)
+  awayScore    Int      @default(0)
+  quarter      Int      @default(1)
+  timeLeft     Int      @default(900) // seconds
+  status       String   @default("pregame") // pregame | active | halftime | final
+  playLog      Json     @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model FantasyLeague {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  teams     Json     @default("[]")
+  settings  Json     @default("{}")
+  status    String   @default("setup")
+  createdAt DateTime @default(now())
+}

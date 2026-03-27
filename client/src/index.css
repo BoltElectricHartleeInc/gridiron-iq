@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 font-ui antialiased;
+  }
+
+  * {
+    @apply border-gray-800;
+  }
+}
+
+@layer utilities {
+  .text-gradient-gold {
+    @apply bg-gradient-to-r from-yellow-400 to-amber-600 bg-clip-text text-transparent;
+  }
+  .card-dark {
+    @apply bg-gray-900 border border-gray-800 rounded-xl;
+  }
+  .btn-primary {
+    @apply bg-nfl-dark hover:bg-blue-800 text-white font-semibold px-4 py-2 rounded-lg transition-colors;
+  }
+  .btn-danger {
+    @apply bg-nfl-red hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors;
+  }
+}

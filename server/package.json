@@ -1,0 +1,38 @@
+{
+  "name": "@gridiron-iq/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx src/data/seed.ts",
+    "scrape": "tsx src/scripts/scrapeProspects.ts",
+    "scrape:2026": "tsx src/scripts/scrapeProspects.ts 2026",
+    "scrape:2027": "tsx src/scripts/scrapeProspects.ts 2027",
+    "scrape:2028": "tsx src/scripts/scrapeProspects.ts 2028",
+    "scrape:all": "tsx src/scripts/scrapeProspects.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.37.0",
+    "@prisma/client": "^6.3.1",
+    "axios": "^1.13.6",
+    "cheerio": "^1.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.1",
+    "prisma": "^6.3.1",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2"
+  }
+}

@@ -1,0 +1,33 @@
+node_modules/
+.DS_Store
+*.pem
+npm-debug.log*
+
+# env — never commit real keys
+.env
+.env.local
+.env.production
+
+# build output
+dist/
+client/dist/
+
+# Vercel
+.vercel
+
+# TypeScript incremental
+*.tsbuildinfo
+
+# SQLite (local only)
+server/prisma/*.db
+server/prisma/*.db-journal
+
+# Prisma generated
+src/generated/prisma/
+
+# Claude internal
+.claude/
+
+# macOS
+._*
+.DS_Store
