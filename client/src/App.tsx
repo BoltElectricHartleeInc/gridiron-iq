@@ -6,6 +6,10 @@ import { PreDraftPage } from './pages/PreDraftPage';
 import { LandingPage } from './pages/LandingPage';
 import { GameSelectPage } from './pages/GameSelectPage';
 import { GamePlayPage } from './pages/GamePlayPage';
+import { GameModesPage } from './pages/GameModesPage';
+import { SeasonModePage } from './pages/SeasonModePage';
+import { FranchiseModePage } from './pages/FranchiseModePage';
+import { PlayoffsPage } from './pages/PlayoffsPage';
 import { ScoutingPage } from './pages/ScoutingPage';
 import { FantasyHubPage } from './pages/FantasyHubPage';
 import { FantasyDraftPage } from './pages/FantasyDraftPage';
@@ -21,8 +25,13 @@ export default function App() {
         <Route path="/draft/pregame" element={<PreDraftPage />} />
         <Route path="/draft/board" element={<DraftBoardPage />} />
         <Route path="/draft/results" element={<DraftResultsPage />} />
+        {/* Game Modes */}
+        <Route path="/game" element={<GameModesPage />} />
         <Route path="/game/select" element={<GameSelectPage />} />
         <Route path="/game/play" element={<GamePlayPage />} />
+        <Route path="/game/season" element={<SeasonModePage />} />
+        <Route path="/game/franchise" element={<FranchiseModePage />} />
+        <Route path="/game/playoffs" element={<PlayoffsPage />} />
         <Route path="/scouting" element={<ScoutingPage />} />
         {/* Fantasy */}
         <Route path="/fantasy" element={<FantasyHubPage />} />

@@ -93,7 +93,7 @@ export function LandingPage() {
       else { resetDraft(); navigate('/draft/select'); }
     } else if (key === 'scouting') navigate('/scouting');
     else if (key === 'fantasy') navigate('/fantasy');
-    else if (key === 'game') navigate('/game/select');
+    else if (key === 'game') navigate('/game');
   };
 
   return (
