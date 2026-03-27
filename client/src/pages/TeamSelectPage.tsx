@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TEAMS_BY_DRAFT_ORDER } from '../data/teams';
+import { TEAMS_BY_DRAFT_ORDER, getTeamR1Pick } from '../data/teams';
 import { useDraftStore } from '../store/draftStore';
 import type { NFLTeam } from '../types/draft';
 
@@ -139,7 +139,7 @@ export function TeamSelectPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
                     <div style={{ width: 3, height: 24, borderRadius: 2, background: team.primaryColor, flexShrink: 0, opacity: isSelected ? 1 : 0.5 }} />
                     <span style={{ fontSize: 18, fontWeight: 800, color: isSelected ? team.primaryColor : S.txtSub, lineHeight: 1, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-                      {team.pick1}
+                      {getTeamR1Pick(team.id) || '—'}
                     </span>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: isSelected ? S.txt : S.txtSub }}>{team.abbreviation}</div>
@@ -294,7 +294,7 @@ export function TeamSelectPage() {
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: selected.primaryColor, flexShrink: 0, boxShadow: `0 0 14px ${selected.primaryColor}55` }} />
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: S.txt }}>{selected.city} {selected.name}</div>
-                      <div style={{ fontSize: 10, color: S.txtSub }}>Pick #{selected.pick1} · {selected.conference} {selected.division}</div>
+                      <div style={{ fontSize: 10, color: S.txtSub }}>{getTeamR1Pick(selected.id) ? `Pick #${getTeamR1Pick(selected.id)}` : 'No R1 pick'} · {selected.conference} {selected.division}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>

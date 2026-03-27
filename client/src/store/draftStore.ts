@@ -616,7 +616,7 @@ export const useDraftStore = create<DraftStore>()(
       dismissTradeOffer: () => set({ incomingTradeOffer: null }),
     }),
     {
-      name: 'gridiron-iq-draft',
+      name: 'gridiron-iq-v2',
       partialize: (state) => ({ session: state.session }),
     }
   )

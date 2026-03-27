@@ -121,7 +121,12 @@ export const DRAFT_2026_SUBSEQUENT_ORDER: string[] = [
   'sea', // 32
 ];
 
-// Legacy — kept for backward compatibility (used in TeamSelectPage to show teams)
+// Returns a team's first-round pick number in 2026 (0 = traded away)
+export function getTeamR1Pick(teamId: string): number {
+  const idx = DRAFT_2026_R1_ORDER.indexOf(teamId);
+  return idx === -1 ? 0 : idx + 1;
+}
+
 export const TEAMS_BY_DRAFT_ORDER = [...NFL_TEAMS]
   .sort((a, b) => {
     const posA = DRAFT_2026_SUBSEQUENT_ORDER.indexOf(a.id);
