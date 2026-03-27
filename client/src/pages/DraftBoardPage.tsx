@@ -74,12 +74,11 @@ function PosBadge({ position }: { position: string }) {
 
 // ─── Value indicator ──────────────────────────────────────────────────────────
 function ValueBadge({ prospect, pickNumber }: { prospect: Prospect; pickNumber: number }) {
-  const projMid = (prospect.round - 1) * 32 + 16;
-  const diff = projMid - pickNumber;
-  // STEAL = player projected to go EARLIER is still available (they fell) → diff is negative (projMid << pickNumber)
-  // REACH = player projected to go LATER, you're taking them early (paying a premium) → diff is positive (projMid >> pickNumber)
-  if (diff <= -24) return <span style={{ fontSize: '9px', fontWeight: 700, color: S.green, letterSpacing: '0.05em' }}>STEAL</span>;
-  if (diff >= 24) return <span style={{ fontSize: '9px', fontWeight: 700, color: S.red, letterSpacing: '0.05em' }}>REACH</span>;
+  // Compare player's actual grade to what's expected at this pick on the draft curve
+  const expectedGrade = Math.max(55, 99 - pickNumber * 0.145);
+  const delta = prospect.grade - expectedGrade;
+  if (delta >= 7)  return <span style={{ fontSize: '9px', fontWeight: 700, color: S.green, letterSpacing: '0.05em' }}>STEAL</span>;
+  if (delta <= -6) return <span style={{ fontSize: '9px', fontWeight: 700, color: S.red, letterSpacing: '0.05em' }}>REACH</span>;
   return <span style={{ fontSize: '9px', fontWeight: 600, color: S.blue, letterSpacing: '0.05em' }}>VALUE</span>;
 }
 

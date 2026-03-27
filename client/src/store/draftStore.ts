@@ -189,12 +189,11 @@ function getAIPickForTeam(
 
 function getPickIndicator(pick: DraftPick): 'steal' | 'reach' | 'value' | null {
   if (!pick.prospect) return null;
-  const projMidpoint = (pick.prospect.round - 1) * 32 + 16; // midpoint of projected round
-  const diff = projMidpoint - pick.overall;
-  // STEAL = projected to go much earlier but fell to this pick (diff negative: projMidpoint << overall)
-  // REACH = projected to go much later, taken early (diff positive: projMidpoint >> overall)
-  if (diff <= -20) return 'steal';
-  if (diff >= 20) return 'reach';
+  // Use grade-vs-expected-grade at this pick position (same curve as calculateTeamGrade)
+  const expectedGrade = Math.max(55, 99 - pick.overall * 0.145);
+  const delta = pick.prospect.grade - expectedGrade;
+  if (delta >= 7) return 'steal';   // meaningfully above expected grade
+  if (delta <= -6) return 'reach';  // meaningfully below expected grade
   return 'value';
 }
 
@@ -227,53 +226,71 @@ function calculateTeamGrade(teamId: string, picks: DraftPick[]): DraftGrade {
     return { teamId, grade: 'C', score: 70, analysis: 'No picks made', picks: [] };
   }
 
-  let score = 0;
+  let totalScore = 0;
   let bestPick: DraftPick | undefined;
   let reach: DraftPick | undefined;
   let steal: DraftPick | undefined;
 
   for (const pick of teamPicks) {
     const prospect = pick.prospect!;
-    const expectedRound = prospect.round;
-    const actualRound = pick.round;
-    const diff = expectedRound - actualRound;
 
-    if (diff >= 2) {
-      score += 20;
-      steal = steal || pick;
-    } else if (diff === 1) {
-      score += 12;
-    } else if (diff === 0) {
-      score += 8;
-    } else if (diff === -1) {
-      score += 3;
-      reach = reach ?? pick;
-    } else {
-      score += 0;
-      reach = pick;
-    }
+    // Expected grade at this pick position using a realistic draft curve:
+    // Pick #1 → ~97, Pick #32 → ~85, Pick #64 → ~78, Pick #128 → ~72, Pick #224 → ~65
+    const expectedGrade = Math.max(55, 99 - pick.overall * 0.145);
+    const delta = prospect.grade - expectedGrade;
 
-    if (prospect.grade >= 90) score += 10;
-    else if (prospect.grade >= 80) score += 5;
+    // Score on a 0–100 scale based on grade vs expectation at this pick
+    let pickScore: number;
+    if (delta >= 12)      { pickScore = 97; steal = steal || pick; }   // elite steal
+    else if (delta >= 7)  { pickScore = 90; steal = steal || pick; }   // great value
+    else if (delta >= 3)  { pickScore = 82; }                          // solid value
+    else if (delta >= -2) { pickScore = 73; }                          // right on value
+    else if (delta >= -6) { pickScore = 60; reach = reach ?? pick; }   // slight reach
+    else if (delta >= -11){ pickScore = 46; reach = pick; }            // reach
+    else                  { pickScore = 28; reach = pick; }            // big reach
+
+    totalScore += pickScore;
 
     if (!bestPick || prospect.grade > (bestPick.prospect?.grade ?? 0)) {
       bestPick = pick;
     }
   }
 
-  const avgScore = score / teamPicks.length;
+  const avgScore = Math.round(totalScore / teamPicks.length);
+
+  // Grade thresholds calibrated to the 0–100 pick score scale
   const gradeMap: Array<[number, DraftGrade['grade']]> = [
-    [95, 'A+'], [90, 'A'], [85, 'A-'], [80, 'B+'], [75, 'B'],
-    [70, 'B-'], [65, 'C+'], [60, 'C'], [55, 'C-'], [50, 'D'], [0, 'F'],
+    [93, 'A+'], [88, 'A'], [83, 'A-'], [78, 'B+'], [73, 'B'],
+    [67, 'B-'], [61, 'C+'], [55, 'C'], [49, 'C-'], [40, 'D'], [0, 'F'],
   ];
 
   const grade = gradeMap.find(([min]) => avgScore >= min)?.[1] ?? 'F';
 
+  const stealCount = teamPicks.filter(p => {
+    if (!p.prospect) return false;
+    const exp = Math.max(55, 99 - p.overall * 0.145);
+    return p.prospect.grade - exp >= 7;
+  }).length;
+
+  const reachCount = teamPicks.filter(p => {
+    if (!p.prospect) return false;
+    const exp = Math.max(55, 99 - p.overall * 0.145);
+    return p.prospect.grade - exp <= -6;
+  }).length;
+
+  const analysis = [
+    `${teamPicks.length} picks made.`,
+    stealCount > 0 ? `${stealCount} steal${stealCount > 1 ? 's' : ''} — well above expected value.` : '',
+    steal ? `Best value: ${steal.prospect!.name} in round ${steal.round}.` : '',
+    reachCount > 0 ? `${reachCount} reach${reachCount > 1 ? 'es' : ''}.` : '',
+    reach ? `Biggest reach: ${reach.prospect!.name}.` : '',
+  ].filter(Boolean).join(' ');
+
   return {
     teamId,
     grade,
-    score: Math.round(avgScore),
-    analysis: `${teamPicks.length} picks made. ${steal ? `Stole ${steal.prospect!.name} in round ${steal.round}. ` : ''}${reach ? `Reached for ${reach.prospect!.name}. ` : ''}`,
+    score: avgScore,
+    analysis,
     picks: teamPicks,
     bestPick,
     reach,
