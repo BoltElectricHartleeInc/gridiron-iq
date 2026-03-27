@@ -6,6 +6,10 @@ import { LandingPage } from './pages/LandingPage';
 import { GameSelectPage } from './pages/GameSelectPage';
 import { GamePlayPage } from './pages/GamePlayPage';
 import { ScoutingPage } from './pages/ScoutingPage';
+import { FantasyHubPage } from './pages/FantasyHubPage';
+import { FantasyDraftPage } from './pages/FantasyDraftPage';
+import { FantasyLeaguePage } from './pages/FantasyLeaguePage';
+import { DFSPage } from './pages/DFSPage';
 
 export default function App() {
   return (
@@ -18,6 +22,11 @@ export default function App() {
         <Route path="/game/select" element={<GameSelectPage />} />
         <Route path="/game/play" element={<GamePlayPage />} />
         <Route path="/scouting" element={<ScoutingPage />} />
+        {/* Fantasy */}
+        <Route path="/fantasy" element={<FantasyHubPage />} />
+        <Route path="/fantasy/draft" element={<FantasyDraftPage />} />
+        <Route path="/fantasy/league" element={<FantasyLeaguePage />} />
+        <Route path="/fantasy/dfs" element={<DFSPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

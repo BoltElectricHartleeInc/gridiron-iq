@@ -52,6 +52,17 @@ const MODULES = [
     icon: '🔭',
   },
   {
+    key: 'fantasy',
+    title: 'Fantasy League',
+    subtitle: 'Season-Long & DFS',
+    desc: 'Real NFL players · Snake draft · DFS contests · Sleeper-powered live scoring',
+    tag: 'Live',
+    tagColor: S.gold,
+    accent: '#1e1a00',
+    span: 1,
+    icon: '🏆',
+  },
+  {
     key: 'game',
     title: 'Arcade Football',
     subtitle: 'Game Mode',
@@ -81,6 +92,7 @@ export function LandingPage() {
       if (session?.status === 'drafting') navigate('/draft/board');
       else { resetDraft(); navigate('/draft/select'); }
     } else if (key === 'scouting') navigate('/scouting');
+    else if (key === 'fantasy') navigate('/fantasy');
     else if (key === 'game') navigate('/game/select');
   };
 
@@ -217,9 +229,9 @@ export function LandingPage() {
           style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}
         >
           {[
-            { label: 'Fantasy League', desc: 'Season-long & DFS', icon: '🏆' },
             { label: 'Live Scores', desc: 'Real-time tracking', icon: '📊' },
             { label: 'News Hub', desc: 'NFL analysis & rumors', icon: '📰' },
+            { label: 'Trade Analyzer', desc: 'Fantasy trade grades', icon: '📈' },
           ].map(item => (
             <div key={item.label} style={{ padding: '12px 14px', borderRadius: 8, background: S.surface, border: `1px solid ${S.border}`, opacity: 0.5, display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 16 }}>{item.icon}</span>
