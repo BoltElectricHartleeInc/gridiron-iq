@@ -15,6 +15,14 @@ import { FantasyHubPage } from './pages/FantasyHubPage';
 import { FantasyDraftPage } from './pages/FantasyDraftPage';
 import { FantasyLeaguePage } from './pages/FantasyLeaguePage';
 import { DFSPage } from './pages/DFSPage';
+import { RecruitingPage } from './pages/RecruitingPage';
+import { ContractNegotiationPage } from './pages/ContractNegotiationPage';
+import { RebuildChallengePage } from './pages/RebuildChallengePage';
+import { HistoricalErasPage } from './pages/HistoricalErasPage';
+import CareerModePage from './pages/CareerModePage';
+import CombinePage from './pages/CombinePage';
+import AnalyticsDashboardPage from './pages/AnalyticsDashboardPage';
+import PresserPage from './pages/PresserPage';
 
 export default function App() {
   return (
@@ -38,6 +46,22 @@ export default function App() {
         <Route path="/fantasy/draft" element={<FantasyDraftPage />} />
         <Route path="/fantasy/league" element={<FantasyLeaguePage />} />
         <Route path="/fantasy/dfs" element={<DFSPage />} />
+        {/* Recruiting */}
+        <Route path="/recruiting" element={<RecruitingPage />} />
+        {/* Franchise — Contract Negotiations */}
+        <Route path="/franchise/contract" element={<ContractNegotiationPage />} />
+        {/* Rebuild Challenge */}
+        <Route path="/rebuild" element={<RebuildChallengePage />} />
+        {/* Historical Eras */}
+        <Route path="/game/historical" element={<HistoricalErasPage />} />
+        {/* Career Mode */}
+        <Route path="/career" element={<CareerModePage />} />
+        {/* Draft Combine */}
+        <Route path="/combine" element={<CombinePage />} />
+        {/* Analytics */}
+        <Route path="/analytics" element={<AnalyticsDashboardPage />} />
+        {/* Press Conference */}
+        <Route path="/presser" element={<PresserPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

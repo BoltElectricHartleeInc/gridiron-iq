@@ -33,19 +33,74 @@ const MODULES = [
     key: 'draft',
     title: 'Mock Draft Simulator',
     subtitle: 'War Room',
-    desc: '480 real 2026 prospects · 32 franchises · AI opponents · Live trade engine',
-    tag: '2026 & 2027 Classes',
+    desc: '480 real 2026 prospects · 32 franchises · AI war room · Hectic pre-draft trade engine',
+    tag: '2026 Class',
     tagColor: S.blue,
     accent: '#1e3460',
     span: 2,
     icon: '📋',
   },
   {
+    key: 'recruiting',
+    title: 'Recruiting',
+    subtitle: 'College Football',
+    desc: '100 AI-powered recruits · Call & pitch each prospect · They respond in real time',
+    tag: 'NEW · AI',
+    tagColor: '#06b6d4',
+    accent: '#001e24',
+    span: 1,
+    icon: '📞',
+  },
+  {
+    key: 'career',
+    title: 'Road to Glory',
+    subtitle: 'Career Mode',
+    desc: 'Create a player · High school → NFL Draft → Pro career · Full progression',
+    tag: 'NEW',
+    tagColor: '#a855f7',
+    accent: '#160a24',
+    span: 1,
+    icon: '⭐',
+  },
+  {
+    key: 'game',
+    title: 'Arcade Football',
+    subtitle: 'Game Modes',
+    desc: 'Exhibition · Season · Franchise · Playoffs · Rebuild · Historical Eras · 32 NFL + 68 NCAA',
+    tag: 'EXPANDED',
+    tagColor: S.green,
+    accent: '#0e2018',
+    span: 1,
+    icon: '🏈',
+  },
+  {
+    key: 'combine',
+    title: 'NFL Combine',
+    subtitle: 'Mini-Games',
+    desc: '40-yard dash · Bench press · Wonderlic · Route running · QB accuracy',
+    tag: 'NEW · 5 EVENTS',
+    tagColor: '#84cc16',
+    accent: '#0f1800',
+    span: 1,
+    icon: '🏃',
+  },
+  {
+    key: 'analytics',
+    title: 'Analytics',
+    subtitle: 'Advanced Stats',
+    desc: 'EPA · Win probability · Draft analytics · Combine metrics · DVOA-style ratings',
+    tag: 'NEW',
+    tagColor: '#0ea5e9',
+    accent: '#001624',
+    span: 1,
+    icon: '📊',
+  },
+  {
     key: 'scouting',
     title: 'Scouting Hub',
     subtitle: 'Big Board',
-    desc: 'AI-generated deep dives · 2025–2028 classes · Watchlist',
-    tag: 'Claude Powered',
+    desc: 'Claude-powered deep dives · 2025–2028 classes · Watchlist builder',
+    tag: 'Claude AI',
     tagColor: '#7c3aed',
     accent: '#1a1035',
     span: 1,
@@ -55,23 +110,12 @@ const MODULES = [
     key: 'fantasy',
     title: 'Fantasy League',
     subtitle: 'Season-Long & DFS',
-    desc: 'Real NFL players · Snake draft · DFS contests · Sleeper-powered live scoring',
+    desc: 'Real NFL players · Snake draft · DFS contests · Live scoring',
     tag: 'Live',
     tagColor: S.gold,
     accent: '#1e1a00',
     span: 1,
     icon: '🏆',
-  },
-  {
-    key: 'game',
-    title: 'Arcade Football',
-    subtitle: 'Game Mode',
-    desc: 'NFL & NCAA · Tecmo Bowl-style gameplay',
-    tag: 'Live',
-    tagColor: S.green,
-    accent: '#0e2018',
-    span: 1,
-    icon: '🏈',
   },
 ];
 
@@ -94,6 +138,10 @@ export function LandingPage() {
     } else if (key === 'scouting') navigate('/scouting');
     else if (key === 'fantasy') navigate('/fantasy');
     else if (key === 'game') navigate('/game');
+    else if (key === 'recruiting') navigate('/recruiting');
+    else if (key === 'career') navigate('/career');
+    else if (key === 'combine') navigate('/combine');
+    else if (key === 'analytics') navigate('/analytics');
   };
 
   return (
@@ -135,10 +183,10 @@ export function LandingPage() {
           </div>
           <h1 style={{ fontSize: 44, fontWeight: 800, color: S.txt, letterSpacing: '-0.04em', lineHeight: 1.05, margin: 0 }}>
             Your Front Office.<br />
-            <span style={{ color: S.gold }}>Your Draft Room.</span>
+            <span style={{ color: S.gold }}>Your Football World.</span>
           </h1>
-          <p style={{ fontSize: 14, color: S.txtSub, marginTop: 12, maxWidth: 480, lineHeight: 1.6 }}>
-            Mock draft like a real GM. 480 real 2026 prospects, AI war room advisor, live trade engine, and full scouting reports on every player.
+          <p style={{ fontSize: 14, color: S.txtSub, marginTop: 12, maxWidth: 520, lineHeight: 1.6 }}>
+            Draft simulator · AI recruiting with real conversations · Career mode · Franchise · Season · Combine · Analytics · Historical eras. Everything Madden won't build.
           </p>
         </motion.div>
 
@@ -205,10 +253,11 @@ export function LandingPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 10 }}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginTop: 10 }}
         >
           {[
             { label: 'Prospects', value: '759', sub: '2026 & 2027 classes' },
+            { label: 'AI Recruits', value: '100', sub: 'Real conversations' },
             { label: 'NFL Teams', value: '32', sub: 'All franchises' },
             { label: 'Draft Rounds', value: '7', sub: 'Full simulation' },
             { label: 'AI Engine', value: 'Claude', sub: 'War room advisor' },
