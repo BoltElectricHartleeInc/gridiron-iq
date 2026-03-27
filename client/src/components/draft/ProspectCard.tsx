@@ -110,7 +110,7 @@ export function ProspectCard({ prospect }: Props) {
     e.stopPropagation();
 
     // Toggle off if already open and successful
-    if (scoutOpen && scoutReport && !scoutError) {
+    if (scoutOpen && scoutReport) {
       setScoutOpen(false);
       return;
     }
@@ -118,7 +118,7 @@ export function ProspectCard({ prospect }: Props) {
     setScoutOpen(true);
 
     // Already fetched successfully — just show
-    if (scoutReport && !scoutError) return;
+    if (scoutReport) return;
 
     await fetchScoutReport();
   };
