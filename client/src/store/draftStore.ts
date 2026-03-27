@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { DraftSession, DraftPick, Prospect, NFLTeam, TradePackage, DraftGrade, AITradeOffer, RosterPlayer } from '../types/draft';
+import type { DraftSession, DraftPick, Prospect, NFLTeam, TradePackage, DraftGrade, AITradeOffer, RosterPlayer, FuturePick } from '../types/draft';
 import { NFL_TEAMS, TEAMS_BY_DRAFT_ORDER, DRAFT_2026_R1_ORDER, DRAFT_2026_SUBSEQUENT_ORDER } from '../data/teams';
 import { PROSPECTS_2026 } from '../data/prospects2026';
 import { PROSPECTS_2027 } from '../data/prospects2027';
 import { getPickValue, getPicksValue } from '../data/tradeChart';
 import { NFL_ROSTERS } from '../data/rosters';
+
+const NFL_TEAM_IDS = ['ten','cle','nyg','ne','jax','lv','nyj','car','no','chi','sf','dal','mia','ind','atl','ari','cin','sea','tb','den','pit','lac','min','gb','wsh','bal','kc','buf','phi','lar','det','hou'];
 
 // Generate picks across N rounds using official 2026 NFL Draft order
 function generateInitialPicks(rounds: number): DraftPick[] {
@@ -73,6 +75,8 @@ interface DraftStore {
   session: DraftSession | null;
   availableProspects: Prospect[];
   grades: DraftGrade[];
+  futurePicks: FuturePick[];
+  rosterOverrides: Record<string, string>;
 
   // Draft settings
   rounds: number;
@@ -103,7 +107,9 @@ interface DraftStore {
   simulateNextPick: () => void;
   simulateToUserPick: () => void;
   proposeTrade: (pkg: TradePackage) => boolean;
-  acceptTrade: (pkg: TradePackage) => void;
+  acceptTrade: (pkg: TradePackage, playerTrade?: { outgoing: string[], incoming: string[] }) => void;
+  tradeFuturePick: (pickId: string, toTeamId: string) => void;
+  tradeRosterPlayers: (outgoingPlayerIds: string[], incomingPlayerIds: string[], userTeamId: string, targetTeamId: string) => void;
   calculateGrades: () => DraftGrade[];
   resetDraft: () => void;
   setCommentary: (text: string | null, type: 'user' | 'ai' | null) => void;
@@ -283,6 +289,8 @@ export const useDraftStore = create<DraftStore>()(
       session: null,
       availableProspects: [],
       grades: [],
+      futurePicks: [],
+      rosterOverrides: {},
 
       // Settings defaults
       rounds: 7,
@@ -320,6 +328,22 @@ export const useDraftStore = create<DraftStore>()(
 
         const prospectPool = draftYear === 2027 ? [...PROSPECTS_2027] : [...PROSPECTS_2026];
 
+        // Generate future picks (2027 + 2028) — all 32 teams own their own picks
+        const futurePicks: FuturePick[] = [];
+        for (const year of [2027, 2028]) {
+          for (const teamId of NFL_TEAM_IDS) {
+            for (let round = 1; round <= 7; round++) {
+              futurePicks.push({
+                id: `${year}-R${round}-${teamId}`,
+                year,
+                round,
+                teamId,
+                originalTeamId: teamId,
+              });
+            }
+          }
+        }
+
         set({
           session: {
             id: crypto.randomUUID(),
@@ -335,6 +359,7 @@ export const useDraftStore = create<DraftStore>()(
           grades: [],
           commentary: null,
           commentaryType: null,
+          futurePicks,
         });
       },
 
@@ -446,7 +471,7 @@ export const useDraftStore = create<DraftStore>()(
         return receiveValue >= offerValue * 0.9;
       },
 
-      acceptTrade: (pkg: TradePackage) => {
+      acceptTrade: (pkg: TradePackage, playerTrade?: { outgoing: string[], incoming: string[] }) => {
         const { session } = get();
         if (!session) return;
 
@@ -460,13 +485,51 @@ export const useDraftStore = create<DraftStore>()(
           return pick;
         });
 
+        // Handle future pick transfers
+        let updatedFuturePicks = get().futurePicks;
+        if (pkg.offeringFuturePickIds?.length || pkg.receivingFuturePickIds?.length) {
+          updatedFuturePicks = [...updatedFuturePicks];
+          for (const id of (pkg.offeringFuturePickIds ?? [])) {
+            const idx = updatedFuturePicks.findIndex(p => p.id === id);
+            if (idx >= 0) updatedFuturePicks[idx] = { ...updatedFuturePicks[idx], teamId: pkg.receivingTeamId };
+          }
+          for (const id of (pkg.receivingFuturePickIds ?? [])) {
+            const idx = updatedFuturePicks.findIndex(p => p.id === id);
+            if (idx >= 0) updatedFuturePicks[idx] = { ...updatedFuturePicks[idx], teamId: pkg.offeringTeamId };
+          }
+        }
+
+        // Handle player transfers
+        let updatedRosterOverrides = get().rosterOverrides;
+        if (playerTrade) {
+          updatedRosterOverrides = { ...updatedRosterOverrides };
+          for (const id of playerTrade.outgoing) updatedRosterOverrides[id] = pkg.receivingTeamId;
+          for (const id of playerTrade.incoming) updatedRosterOverrides[id] = pkg.offeringTeamId;
+        }
+
         set({
           session: {
             ...session,
             picks: updatedPicks,
             tradeHistory: [...session.tradeHistory, pkg],
           },
+          futurePicks: updatedFuturePicks,
+          rosterOverrides: updatedRosterOverrides,
         });
+      },
+
+      tradeFuturePick: (pickId: string, toTeamId: string) => {
+        const picks = [...get().futurePicks];
+        const idx = picks.findIndex(p => p.id === pickId);
+        if (idx >= 0) picks[idx] = { ...picks[idx], teamId: toTeamId };
+        set({ futurePicks: picks });
+      },
+
+      tradeRosterPlayers: (outgoingPlayerIds: string[], incomingPlayerIds: string[], _userTeamId: string, targetTeamId: string) => {
+        const overrides = { ...get().rosterOverrides };
+        for (const id of outgoingPlayerIds) overrides[id] = targetTeamId;
+        for (const id of incomingPlayerIds) overrides[id] = _userTeamId;
+        set({ rosterOverrides: overrides });
       },
 
       calculateGrades: () => {
@@ -478,7 +541,7 @@ export const useDraftStore = create<DraftStore>()(
         return grades;
       },
 
-      resetDraft: () => set({ session: null, availableProspects: [], grades: [], commentary: null, commentaryType: null, compareList: [], incomingTradeOffer: null, acquiredPlayers: [] }),
+      resetDraft: () => set({ session: null, availableProspects: [], grades: [], commentary: null, commentaryType: null, compareList: [], incomingTradeOffer: null, acquiredPlayers: [], futurePicks: [], rosterOverrides: {} }),
 
       setCommentary: (text, type) => set({ commentary: text, commentaryType: type }),
 

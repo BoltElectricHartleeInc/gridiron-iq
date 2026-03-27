@@ -60,6 +60,8 @@ export interface TradePackage {
   receivingTeamId: string;
   offeringPicks: number[];   // overall pick numbers
   receivingPicks: number[];  // overall pick numbers
+  offeringFuturePickIds?: string[];  // future pick IDs
+  receivingFuturePickIds?: string[]; // future pick IDs
   jimJohnsonValue: number;   // net value (positive = offering team wins)
 }
 
@@ -92,6 +94,15 @@ export interface RosterPlayer {
   position: string;
   rating: number;
   contractYears: number;
+  salary: number; // annual salary in millions, e.g. 35.5
+}
+
+export interface FuturePick {
+  id: string;           // e.g. "2027-R1-kc"
+  year: number;         // 2027 or 2028
+  round: number;        // 1–7
+  teamId: string;       // current owner
+  originalTeamId: string;
 }
 
 export interface AITradeOffer {

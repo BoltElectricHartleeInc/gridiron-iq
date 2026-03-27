@@ -74,3 +74,14 @@ export function findFairReturn(pickNumber: number, availablePicks: number[]): nu
 
   return [];
 }
+
+// Value of a future pick — based on round with year discount
+export function getFuturePickValue(round: number, year: number): number {
+  const currentYear = 2026;
+  const yearDiscount = Math.pow(0.85, year - currentYear); // 15% discount per year out
+  // Approximate mid-round pick value for each round
+  const roundValues: Record<number, number> = {
+    1: 1200, 2: 480, 3: 280, 4: 160, 5: 100, 6: 64, 7: 40,
+  };
+  return Math.round((roundValues[round] ?? 40) * yearDiscount);
+}

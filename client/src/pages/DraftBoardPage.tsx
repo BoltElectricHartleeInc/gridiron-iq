@@ -712,7 +712,7 @@ export function DraftBoardPage() {
       </div>
 
       {/* ── MODALS ────────────────────────────────────────────────────────── */}
-      {showTrade && session && <TradeModal session={session} availableProspects={availableProspects} onClose={() => setShowTrade(false)} />}
+      {showTrade && session && <TradeModal session={session} onClose={() => setShowTrade(false)} />}
       {compareList.length >= 2 && <ProspectCompare prospects={compareList as [Prospect, Prospect]} onClose={clearCompare} canDraft={isUserTurn} onDraft={isUserTurn ? (id) => { handleMakePick(id); clearCompare(); } : undefined} />}
       <AnimatePresence>
         {incomingTradeOffer && (
