@@ -76,9 +76,62 @@ function PosBadge({ position }: { position: string }) {
 function ValueBadge({ prospect, pickNumber }: { prospect: Prospect; pickNumber: number }) {
   const projMid = (prospect.round - 1) * 32 + 16;
   const diff = projMid - pickNumber;
-  if (diff >= 24) return <span style={{ fontSize: '9px', fontWeight: 700, color: S.green, letterSpacing: '0.05em' }}>STEAL</span>;
-  if (diff <= -24) return <span style={{ fontSize: '9px', fontWeight: 700, color: S.red, letterSpacing: '0.05em' }}>REACH</span>;
+  // STEAL = player projected to go EARLIER is still available (they fell) → diff is negative (projMid << pickNumber)
+  // REACH = player projected to go LATER, you're taking them early (paying a premium) → diff is positive (projMid >> pickNumber)
+  if (diff <= -24) return <span style={{ fontSize: '9px', fontWeight: 700, color: S.green, letterSpacing: '0.05em' }}>STEAL</span>;
+  if (diff >= 24) return <span style={{ fontSize: '9px', fontWeight: 700, color: S.red, letterSpacing: '0.05em' }}>REACH</span>;
   return <span style={{ fontSize: '9px', fontWeight: 600, color: S.blue, letterSpacing: '0.05em' }}>VALUE</span>;
+}
+
+// Local fallback advisor — works without API
+const ADVISOR_POS_VALUE: Record<string, number> = {
+  QB: 100, EDGE: 90, OT: 85, CB: 82, WR: 80,
+  DT: 75, S: 70, LB: 68, TE: 65, OG: 60,
+  RB: 55, C: 50, K: 20, P: 20,
+};
+
+function generateLocalAdvice(params: {
+  teamNeeds: string[];
+  availableProspects: Array<{ name: string; position: string; college: string; grade: number; round: number }>;
+  pickNumber: number;
+  round: number;
+  needsWeight: number;
+}): string {
+  const { teamNeeds, availableProspects, pickNumber, round, needsWeight } = params;
+  if (availableProspects.length === 0) return 'PICK: No prospects available\nFIT: Board is empty.\nINTEL: Draft complete.\nCONCERN: None.';
+
+  const nw = needsWeight / 100;
+  const scored = availableProspects.map(p => {
+    const bpa = p.grade;
+    const needIdx = teamNeeds.indexOf(p.position);
+    const needScore = needIdx === -1 ? 30 : Math.max(0, 100 - needIdx * 20);
+    const posScore = ADVISOR_POS_VALUE[p.position] ?? 50;
+    const score = bpa * (1 - nw) + needScore * nw + posScore * 0.08;
+    return { p, score };
+  }).sort((a, b) => b.score - a.score);
+
+  const top = scored[0].p;
+  const second = scored[1]?.p;
+
+  const needIdx = teamNeeds.indexOf(top.position);
+  const fitReason = needIdx === 0
+    ? `addresses your #1 need at ${top.position}`
+    : needIdx > 0 && needIdx <= 2
+      ? `fills a roster need at ${top.position}`
+      : `best player available at this pick`;
+
+  const roundDiff = top.round - round;
+  const concern = roundDiff <= -2
+    ? `Projected ${top.round > 0 ? 'R' + top.round : 'undrafted'} — significant reach. Needs justify it.`
+    : roundDiff >= 2
+      ? `Projected R${top.round} player still available — rare value.`
+      : 'None — solid value pick at this slot.';
+
+  const intel = second
+    ? `${second.name} (${second.position}) is the next best option if you prefer the position.`
+    : 'Thin board — take your top-rated player.';
+
+  return `PICK: ${top.name} (${top.position}, ${top.college})\nFIT: Grade ${top.grade} ${top.position} — ${fitReason} at pick #${pickNumber}.\nINTEL: ${intel}\nCONCERN: ${concern}`;
 }
 
 // ─── Board analytics ─────────────────────────────────────────────────────────
@@ -108,7 +161,7 @@ export function DraftBoardPage() {
   const {
     session, availableProspects,
     makePick, simulateNextPick, simulateToUserPick,
-    resetDraft, simSpeed, aiAdvisorEnabled, needsWeight,
+    resetDraft, simSpeed, setDraftSettings, aiAdvisorEnabled, needsWeight, positionWeight, tradeFrequency, draftCraziness,
     commentary, commentaryType, setCommentary,
     compareList, addToCompare, clearCompare,
     incomingTradeOffer, generateAITradeOffer, respondToAITradeOffer,
@@ -117,9 +170,10 @@ export function DraftBoardPage() {
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
   const [showTrade, setShowTrade] = useState(false);
   const [posFilter, setPosFilter] = useState<string>('ALL');
-  const [autoSim, setAutoSim] = useState(false);
+  const [autoSim, setAutoSim] = useState(true);
   const [lastPickAnim, setLastPickAnim] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
 
   // AI Advisor
   const [advisorText, setAdvisorText] = useState<string>('');
@@ -142,7 +196,7 @@ export function DraftBoardPage() {
   useEffect(() => {
     if (!autoSim || !session || session.status !== 'drafting') return;
     const currentPick = session.picks[session.currentPickIndex];
-    if (!currentPick || currentPick.isUserPick) { setAutoSim(false); return; }
+    if (!currentPick || currentPick.isUserPick) return; // pause at user turn, don't stop autoSim
     const timer = setTimeout(() => simulateNextPick(), simSpeed);
     return () => clearTimeout(timer);
   }, [autoSim, session, simulateNextPick, simSpeed]);
@@ -206,7 +260,22 @@ export function DraftBoardPage() {
       signal: ctrl.signal,
     })
       .then(async res => {
-        if (!res.ok || !res.body) { setAdvisorText('Unable to reach war room server.'); setAdvisorLoading(false); return; }
+        if (!res.ok || !res.body) {
+          const team = NFL_TEAMS.find(t => t.id === session?.userTeamId);
+          const localAdvice = generateLocalAdvice({
+            teamNeeds: team?.needs ?? [],
+            availableProspects: availableProspects.slice(0, 12).map(p => ({
+              name: p.name, position: p.position, college: p.college,
+              grade: p.grade, round: p.round,
+            })),
+            pickNumber: session?.picks[session?.currentPickIndex ?? 0]?.overall ?? 1,
+            round: session?.picks[session?.currentPickIndex ?? 0]?.round ?? 1,
+            needsWeight,
+          });
+          setAdvisorText(localAdvice);
+          setAdvisorLoading(false);
+          return;
+        }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let full = '';
@@ -220,7 +289,19 @@ export function DraftBoardPage() {
       })
       .catch(err => {
         if (err?.name === 'AbortError') return;
-        setAdvisorText('War room advisor unavailable.');
+        // Fall back to local advisor
+        const team = NFL_TEAMS.find(t => t.id === session?.userTeamId);
+        const localAdvice = generateLocalAdvice({
+          teamNeeds: team?.needs ?? [],
+          availableProspects: availableProspects.slice(0, 12).map(p => ({
+            name: p.name, position: p.position, college: p.college,
+            grade: p.grade, round: p.round,
+          })),
+          pickNumber: session?.picks[session?.currentPickIndex ?? 0]?.overall ?? 1,
+          round: session?.picks[session?.currentPickIndex ?? 0]?.round ?? 1,
+          needsWeight,
+        });
+        setAdvisorText(localAdvice);
         setAdvisorLoading(false);
       });
   }, [session, session?.currentPickIndex, aiAdvisorEnabled, availableProspects, needsWeight, generateAITradeOffer]);
@@ -310,6 +391,28 @@ export function DraftBoardPage() {
 
         {/* Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Speed selector — always visible */}
+          {(['Fast', 'Normal', 'Slow'] as const).map((label, i) => {
+            const speeds = [400, 900, 1800];
+            const speed = speeds[i];
+            return (
+              <button
+                key={label}
+                onClick={() => setDraftSettings({ simSpeed: speed })}
+                style={{ fontSize: 9, padding: '3px 7px', borderRadius: 4, background: simSpeed === speed ? S.blueSub : 'transparent', border: `1px solid ${simSpeed === speed ? 'rgba(59,125,216,0.4)' : S.border}`, color: simSpeed === speed ? S.blue : S.txtMuted, cursor: 'pointer', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' as const }}
+              >
+                {label}
+              </button>
+            );
+          })}
+          {/* Pause/Resume — always visible */}
+          <button
+            onClick={() => setAutoSim(!autoSim)}
+            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: autoSim ? S.goldSub : S.elevated, border: `1px solid ${autoSim ? 'rgba(196,154,26,0.35)' : S.border}`, color: autoSim ? S.gold : S.txtSub, cursor: 'pointer', fontWeight: 600 }}
+          >
+            {autoSim ? '⏸ Pause' : '▶ Resume'}
+          </button>
+          {/* Sim controls — secondary */}
           {!isUserTurn && (
             <>
               <button onClick={simulateNextPick} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: S.elevated, border: `1px solid ${S.border}`, color: S.txtSub, cursor: 'pointer', fontWeight: 500 }}>
@@ -317,9 +420,6 @@ export function DraftBoardPage() {
               </button>
               <button onClick={simulateToUserPick} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: S.elevated, border: `1px solid ${S.border}`, color: S.txtSub, cursor: 'pointer', fontWeight: 500 }}>
                 Skip to My Pick →
-              </button>
-              <button onClick={() => setAutoSim(!autoSim)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: autoSim ? S.goldSub : S.elevated, border: `1px solid ${autoSim ? 'rgba(196,154,26,0.35)' : S.border}`, color: autoSim ? S.gold : S.txtSub, cursor: 'pointer', fontWeight: 600 }}>
-                {autoSim ? '⏸ Pause' : '▶ Auto'}
               </button>
             </>
           )}
@@ -333,6 +433,11 @@ export function DraftBoardPage() {
               × Compare ({compareList.length}/2)
             </button>
           )}
+          <button
+            onClick={() => setShowSettings(s => !s)}
+            style={{ fontSize: 14, width: 28, height: 28, borderRadius: 5, background: showSettings ? S.blueSub : S.elevated, border: `1px solid ${showSettings ? 'rgba(59,125,216,0.4)' : S.border}`, color: showSettings ? S.blue : S.txtSub, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Draft Settings"
+          >⚙</button>
         </div>
       </div>
 
@@ -404,6 +509,12 @@ export function DraftBoardPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
                       <ValueBadge prospect={prospect} pickNumber={currentPick?.overall ?? 1} />
                       <div style={{ display: 'flex', gap: 3 }}>
+                        {isUserTurn && (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleMakePick(prospect.id); }}
+                            style={{ fontSize: 9, padding: '2px 7px', borderRadius: 3, background: `linear-gradient(135deg, ${S.blue}cc, ${S.blue}88)`, border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 700, letterSpacing: '0.04em' }}
+                          >DRAFT</button>
+                        )}
                         <button
                           onClick={e => { e.stopPropagation(); if (!inCompare) addToCompare(prospect); }}
                           style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: inCompare ? S.goldSub : S.elevated, border: `1px solid ${inCompare ? 'rgba(196,154,26,0.3)' : S.border}`, color: inCompare ? S.gold : S.txtMuted, cursor: 'pointer', fontWeight: 600 }}
@@ -605,7 +716,97 @@ export function DraftBoardPage() {
       {compareList.length >= 2 && <ProspectCompare prospects={compareList as [Prospect, Prospect]} onClose={clearCompare} canDraft={isUserTurn} onDraft={isUserTurn ? (id) => { handleMakePick(id); clearCompare(); } : undefined} />}
       <AnimatePresence>
         {incomingTradeOffer && (
-          <IncomingTradeOffer offer={incomingTradeOffer} currentPickIndex={session?.currentPickIndex ?? 0} onAccept={() => respondToAITradeOffer(true)} onDecline={() => respondToAITradeOffer(false)} />
+          <IncomingTradeOffer offer={incomingTradeOffer} currentPickIndex={session?.currentPickIndex ?? 0} userPicks={userPicks} onAccept={() => respondToAITradeOffer(true)} onDecline={() => respondToAITradeOffer(false)} />
+        )}
+      </AnimatePresence>
+
+      {/* ── SETTINGS DRAWER ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            style={{ position: 'absolute', top: 48, right: 16, zIndex: 60, width: 280, background: S.surface, border: `1px solid ${S.borderHi}`, borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden' }}
+          >
+            <div style={{ padding: '10px 14px', borderBottom: `1px solid ${S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: S.txt, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Draft Settings</span>
+              <button onClick={() => setShowSettings(false)} style={{ fontSize: 14, color: S.txtMuted, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {/* Needs vs BPA */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: S.txt }}>Needs vs BPA</span>
+                  <span style={{ fontSize: 9, color: S.txtMuted }}>
+                    {needsWeight < 25 ? 'Pure BPA' : needsWeight < 45 ? 'BPA Lean' : needsWeight <= 55 ? 'Balanced' : needsWeight < 75 ? 'Needs Lean' : 'Pure Needs'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, color: S.txtMuted, width: 28 }}>BPA</span>
+                  <input type="range" min={0} max={100} value={needsWeight}
+                    onChange={e => setDraftSettings({ needsWeight: Number(e.target.value) })}
+                    style={{ flex: 1, accentColor: S.blue }} />
+                  <span style={{ fontSize: 9, color: S.txtMuted, width: 36, textAlign: 'right' }}>Needs</span>
+                </div>
+                <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 3 }}>How much CPU teams prioritize roster needs vs. best player available</div>
+              </div>
+
+              {/* Position Scarcity */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: S.txt }}>Position Scarcity Weight</span>
+                  <span style={{ fontSize: 9, color: S.txtMuted }}>{positionWeight}%</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, color: S.txtMuted, width: 28 }}>Low</span>
+                  <input type="range" min={0} max={100} value={positionWeight}
+                    onChange={e => setDraftSettings({ positionWeight: Number(e.target.value) })}
+                    style={{ flex: 1, accentColor: S.blue }} />
+                  <span style={{ fontSize: 9, color: S.txtMuted, width: 36, textAlign: 'right' }}>High</span>
+                </div>
+                <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 3 }}>How heavily CPU teams weigh premium positions (QB, EDGE, OT) over others</div>
+              </div>
+
+              {/* Trade Frequency */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: S.txt }}>Trade Offer Frequency</span>
+                  <span style={{ fontSize: 9, color: S.txtMuted }}>
+                    {tradeFrequency < 15 ? 'Rare' : tradeFrequency < 35 ? 'Low' : tradeFrequency < 60 ? 'Normal' : tradeFrequency < 80 ? 'Active' : 'Frenzy'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, color: S.txtMuted, width: 28 }}>Rare</span>
+                  <input type="range" min={0} max={100} value={tradeFrequency}
+                    onChange={e => setDraftSettings({ tradeFrequency: Number(e.target.value) })}
+                    style={{ flex: 1, accentColor: S.gold }} />
+                  <span style={{ fontSize: 9, color: S.txtMuted, width: 36, textAlign: 'right' }}>Crazy</span>
+                </div>
+                <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 3 }}>How often CPU teams call you with trade offers on your pick</div>
+              </div>
+
+              {/* Draft Craziness */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: S.txt }}>Draft Craziness</span>
+                  <span style={{ fontSize: 9, color: S.txtMuted }}>
+                    {draftCraziness < 20 ? 'Predictable' : draftCraziness < 45 ? 'Realistic' : draftCraziness < 70 ? 'Unpredictable' : 'Chaos'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, color: S.txtMuted, width: 28 }}>Sim</span>
+                  <input type="range" min={0} max={100} value={draftCraziness}
+                    onChange={e => setDraftSettings({ draftCraziness: Number(e.target.value) })}
+                    style={{ flex: 1, accentColor: S.red }} />
+                  <span style={{ fontSize: 9, color: S.txtMuted, width: 36, textAlign: 'right' }}>Wild</span>
+                </div>
+                <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 3 }}>How randomly CPU teams deviate from their top pick — high = more surprises</div>
+              </div>
+
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

@@ -27,24 +27,12 @@ export function ProspectCard({ prospect }: Props) {
   const [scoutReport, setScoutReport] = useState<string>('');
   const [scoutLoading, setScoutLoading] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
+  const [scoutError, setScoutError] = useState(false);
 
-  const handleScout = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-
-    // Toggle off if already open
-    if (scoutOpen && scoutReport) {
-      setScoutOpen(false);
-      return;
-    }
-
-    // Already fetched — just show
-    if (scoutReport) {
-      setScoutOpen(true);
-      return;
-    }
-
+  const fetchScoutReport = async () => {
     setScoutLoading(true);
-    setScoutOpen(true);
+    setScoutError(false);
+    setScoutReport('');
 
     try {
       const res = await fetch(API_BASE + '/api/scouting/analyze', {
@@ -61,7 +49,7 @@ export function ProspectCard({ prospect }: Props) {
       });
 
       if (!res.ok || !res.body) {
-        setScoutReport('Failed to load scouting report. Make sure the server is running.');
+        setScoutError(true);
         setScoutLoading(false);
         return;
       }
@@ -78,10 +66,27 @@ export function ProspectCard({ prospect }: Props) {
         setScoutReport(full);
       }
     } catch {
-      setScoutReport('Failed to connect to server. Make sure the server is running on port 4000.');
+      setScoutError(true);
     } finally {
       setScoutLoading(false);
     }
+  };
+
+  const handleScout = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    // Toggle off if already open and successful
+    if (scoutOpen && scoutReport && !scoutError) {
+      setScoutOpen(false);
+      return;
+    }
+
+    setScoutOpen(true);
+
+    // Already fetched successfully — just show
+    if (scoutReport && !scoutError) return;
+
+    await fetchScoutReport();
   };
 
   return (
@@ -164,13 +169,25 @@ export function ProspectCard({ prospect }: Props) {
         <div
           className="rounded-xl p-3 text-xs leading-relaxed whitespace-pre-wrap"
           style={{
-            background: 'rgba(99,102,241,0.06)',
-            border: '1px solid rgba(99,102,241,0.15)',
+            background: scoutError ? 'rgba(181,56,56,0.06)' : 'rgba(99,102,241,0.06)',
+            border: scoutError ? '1px solid rgba(181,56,56,0.2)' : '1px solid rgba(99,102,241,0.15)',
             color: 'rgba(255,255,255,0.65)',
           }}
         >
           {scoutLoading && !scoutReport ? (
             <span className="text-white/30">Analyzing prospect…</span>
+          ) : scoutError ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={{ color: 'rgba(224,112,112,0.9)' }}>
+                AI scouting requires the server. Try refreshing or check back shortly.
+              </span>
+              <button
+                onClick={e => { e.stopPropagation(); fetchScoutReport(); }}
+                style={{ alignSelf: 'flex-start', fontSize: 10, padding: '3px 10px', borderRadius: 5, background: 'rgba(181,56,56,0.15)', border: '1px solid rgba(181,56,56,0.35)', color: '#e07070', cursor: 'pointer', fontWeight: 600 }}
+              >
+                ↻ Retry
+              </button>
+            </div>
           ) : (
             scoutReport
           )}

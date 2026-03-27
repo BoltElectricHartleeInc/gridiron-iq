@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { TeamSelectPage } from './pages/TeamSelectPage';
 import { DraftBoardPage } from './pages/DraftBoardPage';
 import { DraftResultsPage } from './pages/DraftResultsPage';
+import { PreDraftPage } from './pages/PreDraftPage';
 import { LandingPage } from './pages/LandingPage';
 import { GameSelectPage } from './pages/GameSelectPage';
 import { GamePlayPage } from './pages/GamePlayPage';
@@ -17,6 +18,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/draft/select" element={<TeamSelectPage />} />
+        <Route path="/draft/pregame" element={<PreDraftPage />} />
         <Route path="/draft/board" element={<DraftBoardPage />} />
         <Route path="/draft/results" element={<DraftResultsPage />} />
         <Route path="/game/select" element={<GameSelectPage />} />

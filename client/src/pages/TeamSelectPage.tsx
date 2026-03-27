@@ -51,7 +51,7 @@ export function TeamSelectPage() {
     if (!selected && !commissionerMode) return;
     const teamId = selected?.id ?? TEAMS_BY_DRAFT_ORDER[0].id;
     startDraft(teamId);
-    navigate('/draft/board');
+    navigate('/draft/pregame');
   };
 
   const speedIndex = SPEED_LABELS.findIndex(s => s.value === simSpeed);
@@ -331,7 +331,7 @@ export function TeamSelectPage() {
               boxShadow: selected || commissionerMode ? `0 4px 20px ${(selected?.primaryColor ?? S.blue)}33` : 'none',
             }}
           >
-            {commissionerMode ? 'Enter Commissioner Mode' : selected ? `Draft as ${selected.abbreviation} →` : 'Select a Team'}
+            {commissionerMode ? 'Enter Commissioner Mode' : selected ? `Enter War Room as ${selected.abbreviation} →` : 'Select a Team'}
           </motion.button>
         </div>
       </div>

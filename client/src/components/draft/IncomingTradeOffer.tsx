@@ -1,11 +1,13 @@
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { NFL_TEAMS } from '../../data/teams';
-import type { AITradeOffer } from '../../types/draft';
+import type { AITradeOffer, DraftPick } from '../../types/draft';
 import { getPickValue } from '../../data/tradeChart';
 
 interface Props {
   offer: AITradeOffer;
   currentPickIndex: number;
+  userPicks: DraftPick[];
   onAccept: () => void;
   onDecline: () => void;
 }
@@ -23,7 +25,9 @@ function getPickLabel(overall: number): string {
   return `R${round} P${pickInRound} (#${overall})`;
 }
 
-export function IncomingTradeOffer({ offer, currentPickIndex, onAccept, onDecline }: Props) {
+type CounterState = 'idle' | 'editing' | 'accepted' | 'declined';
+
+export function IncomingTradeOffer({ offer, currentPickIndex, userPicks, onAccept, onDecline }: Props) {
   const fromTeam = NFL_TEAMS.find(t => t.id === offer.fromTeamId);
   const accentColor = fromTeam?.primaryColor ?? '#6366f1';
   const picksLeft = offer.expiresAtPickIndex - currentPickIndex;
@@ -36,6 +40,26 @@ export function IncomingTradeOffer({ offer, currentPickIndex, onAccept, onDeclin
   const valuePct = Math.min(100, Math.round((totalOffer / Math.max(requestedValue, 1)) * 100));
   const isFavorable = totalOffer >= requestedValue * 0.95;
 
+  // Counter offer state
+  const [counterState, setCounterState] = useState<CounterState>('idle');
+  // Available picks for counter: user's upcoming picks excluding the one being asked for
+  const counterPicks = userPicks.filter(p => !p.prospect && p.overall !== offer.wantsPickOverall);
+  const [selectedCounterPick, setSelectedCounterPick] = useState<number>(
+    counterPicks[0]?.overall ?? 0
+  );
+
+  const handleCounter = () => {
+    if (!selectedCounterPick) return;
+    // 50% chance AI accepts
+    const accepted = Math.random() >= 0.5;
+    setCounterState(accepted ? 'accepted' : 'declined');
+    if (accepted) {
+      setTimeout(() => onAccept(), 1600);
+    } else {
+      setTimeout(() => onDecline(), 1600);
+    }
+  };
+
   return (
     <motion.div
       initial={{ x: 420, opacity: 0 }}
@@ -43,7 +67,7 @@ export function IncomingTradeOffer({ offer, currentPickIndex, onAccept, onDeclin
       exit={{ x: 420, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       className="absolute right-0 top-0 bottom-0 z-40 flex items-center pointer-events-none"
-      style={{ width: '380px' }}
+      style={{ width: counterState === 'editing' ? '480px' : '380px' }}
     >
       <div
         className="pointer-events-auto w-full mx-3 rounded-2xl overflow-hidden"
@@ -229,32 +253,138 @@ export function IncomingTradeOffer({ offer, currentPickIndex, onAccept, onDeclin
             </div>
           </div>
 
+          {/* Counter result feedback */}
+          <AnimatePresence>
+            {counterState === 'accepted' && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="mb-3 p-3 rounded-xl text-center text-sm font-bold"
+                style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80' }}
+              >
+                Counter Accepted!
+              </motion.div>
+            )}
+            {counterState === 'declined' && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="mb-3 p-3 rounded-xl text-center text-sm font-bold"
+                style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}
+              >
+                Counter Declined
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Counter editor panel */}
+          <AnimatePresence>
+            {counterState === 'editing' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="mb-3 rounded-xl overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                <div className="p-3">
+                  <div className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    Your Counter Offer
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Their offer side */}
+                    <div>
+                      <div className="text-xs font-semibold mb-2" style={{ color: '#4ade80' }}>They Give</div>
+                      {offer.offersPickOveralls.map(o => (
+                        <div key={o} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                          {getPickLabel(o)}
+                        </div>
+                      ))}
+                    </div>
+                    {/* User counter pick */}
+                    <div>
+                      <div className="text-xs font-semibold mb-2" style={{ color: '#f87171' }}>You Send (Counter)</div>
+                      {counterPicks.length === 0 ? (
+                        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>No other picks available</div>
+                      ) : (
+                        <select
+                          value={selectedCounterPick}
+                          onChange={e => setSelectedCounterPick(Number(e.target.value))}
+                          style={{ width: '100%', background: '#0d0d1a', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: '4px 6px', color: 'rgba(255,255,255,0.8)', fontSize: 11, cursor: 'pointer', outline: 'none' }}
+                        >
+                          {counterPicks.map(p => (
+                            <option key={p.overall} value={p.overall}>
+                              {getPickLabel(p.overall)} ({getPickValue(p.overall)} pts)
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {selectedCounterPick > 0 && (
+                        <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          Value: {getPickValue(selectedCounterPick)} pts
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={handleCounter}
+                      disabled={!selectedCounterPick || counterPicks.length === 0}
+                      className="flex-1 py-2 rounded-xl font-bold text-xs tracking-wider"
+                      style={{ background: 'rgba(59,125,216,0.18)', border: '1px solid rgba(59,125,216,0.4)', color: '#7ab3f0', cursor: selectedCounterPick ? 'pointer' : 'not-allowed', opacity: selectedCounterPick ? 1 : 0.5 }}
+                    >
+                      Submit Counter
+                    </button>
+                    <button
+                      onClick={() => setCounterState('idle')}
+                      className="px-4 py-2 rounded-xl font-bold text-xs"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.35)', cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Action buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={onAccept}
-              className="py-2.5 rounded-xl font-bold text-sm tracking-wider transition-all"
-              style={{
-                background: 'rgba(30,140,78,0.18)',
-                border: '1px solid rgba(30,140,78,0.4)',
-                color: '#3dba78',
-                boxShadow: '0 0 16px rgba(30,140,78,0.12)',
-              }}
-            >
-              ✓ ACCEPT
-            </button>
-            <button
-              onClick={onDecline}
-              className="py-2.5 rounded-xl font-bold text-sm tracking-wider transition-all"
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: 'rgba(255,255,255,0.4)',
-              }}
-            >
-              &#10005; DECLINE
-            </button>
-          </div>
+          {counterState === 'idle' && (
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={onAccept}
+                className="py-2.5 rounded-xl font-bold text-sm tracking-wider transition-all"
+                style={{
+                  background: 'rgba(30,140,78,0.18)',
+                  border: '1px solid rgba(30,140,78,0.4)',
+                  color: '#3dba78',
+                  boxShadow: '0 0 16px rgba(30,140,78,0.12)',
+                }}
+              >
+                ✓ ACCEPT
+              </button>
+              <button
+                onClick={() => setCounterState('editing')}
+                disabled={counterPicks.length === 0}
+                className="py-2.5 rounded-xl font-bold text-sm tracking-wider transition-all"
+                style={{
+                  background: 'rgba(59,125,216,0.12)',
+                  border: '1px solid rgba(59,125,216,0.3)',
+                  color: counterPicks.length > 0 ? '#7ab3f0' : 'rgba(255,255,255,0.2)',
+                  cursor: counterPicks.length > 0 ? 'pointer' : 'not-allowed',
+                }}
+              >
+                ⇄ COUNTER
+              </button>
+              <button
+                onClick={onDecline}
+                className="py-2.5 rounded-xl font-bold text-sm tracking-wider transition-all"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'rgba(255,255,255,0.4)',
+                }}
+              >
+                &#10005; DECLINE
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>

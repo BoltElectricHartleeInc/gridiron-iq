@@ -62,6 +62,8 @@ interface DraftSettings {
   simSpeed: number;
   needsWeight: number;
   positionWeight: number;
+  tradeFrequency: number;   // 0–100, default 35
+  draftCraziness: number;   // 0–100, default 20
   commissionerMode: boolean;
   aiAdvisorEnabled: boolean;
   draftYear: number;
@@ -77,6 +79,8 @@ interface DraftStore {
   simSpeed: number;
   needsWeight: number;
   positionWeight: number;
+  tradeFrequency: number;
+  draftCraziness: number;
   commissionerMode: boolean;
   aiAdvisorEnabled: boolean;
   draftYear: number;
@@ -124,6 +128,7 @@ function getAIPickForTeam(
   draftStyle: string,
   needsWeight: number,
   positionWeight: number,
+  draftCraziness: number = 20,
 ): Prospect {
   const sorted = [...available].sort((a, b) => b.grade - a.grade);
   if (sorted.length === 0) return available[0]; // fallback
@@ -170,15 +175,20 @@ function getAIPickForTeam(
   }
 
   scored.sort((a, b) => b.score - a.score);
-  return scored[0].prospect;
+  // Craziness: randomly pick from top N candidates (higher craziness = wilder picks)
+  const poolSize = Math.max(1, Math.round(1 + (draftCraziness / 100) * 4)); // 1–5 candidates
+  const pool = scored.slice(0, Math.min(poolSize, scored.length));
+  return pool[Math.floor(Math.random() * pool.length)].prospect;
 }
 
 function getPickIndicator(pick: DraftPick): 'steal' | 'reach' | 'value' | null {
   if (!pick.prospect) return null;
   const projMidpoint = (pick.prospect.round - 1) * 32 + 16; // midpoint of projected round
   const diff = projMidpoint - pick.overall;
-  if (diff >= 20) return 'steal';
-  if (diff <= -20) return 'reach';
+  // STEAL = projected to go much earlier but fell to this pick (diff negative: projMidpoint << overall)
+  // REACH = projected to go much later, taken early (diff positive: projMidpoint >> overall)
+  if (diff <= -20) return 'steal';
+  if (diff >= 20) return 'reach';
   return 'value';
 }
 
@@ -279,6 +289,8 @@ export const useDraftStore = create<DraftStore>()(
       simSpeed: 800,
       needsWeight: 50,
       positionWeight: 50,
+      tradeFrequency: 35,
+      draftCraziness: 20,
       commissionerMode: false,
       aiAdvisorEnabled: true,
       draftYear: 2026,
@@ -354,7 +366,7 @@ export const useDraftStore = create<DraftStore>()(
       },
 
       simulateNextPick: () => {
-        const { session, availableProspects, needsWeight, positionWeight } = get();
+        const { session, availableProspects, needsWeight, positionWeight, draftCraziness } = get();
         if (!session || session.status !== 'drafting') return;
 
         const pick = session.picks[session.currentPickIndex];
@@ -363,7 +375,7 @@ export const useDraftStore = create<DraftStore>()(
         const team = NFL_TEAMS.find(t => t.id === pick.teamId);
         if (!team) return;
 
-        const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight);
+        const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight, draftCraziness);
 
         const updatedPicks = [...session.picks];
         updatedPicks[session.currentPickIndex] = { ...pick, prospect: aiPick };
@@ -387,7 +399,7 @@ export const useDraftStore = create<DraftStore>()(
         if (!state.session) return;
 
         let { session, availableProspects } = state;
-        const { needsWeight, positionWeight } = state;
+        const { needsWeight, positionWeight, draftCraziness } = state;
         let lastCommentary = '';
 
         while (
@@ -399,7 +411,7 @@ export const useDraftStore = create<DraftStore>()(
           const team = NFL_TEAMS.find(t => t.id === pick.teamId);
           if (!team) break;
 
-          const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight);
+          const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight, draftCraziness);
           const updatedPicks = [...session.picks];
           updatedPicks[session.currentPickIndex] = { ...pick, prospect: aiPick };
 
@@ -492,8 +504,8 @@ export const useDraftStore = create<DraftStore>()(
         const currentPick = session.picks[currentPickIndex];
         if (!currentPick?.isUserPick) return;
 
-        // 35% chance of generating an offer
-        if (Math.random() > 0.35) return;
+        const { tradeFrequency } = get();
+        if (Math.random() > tradeFrequency / 100) return;
 
         // Find teams picking after the user (1-8 picks away) that need a position
         const userPickValue = getPickValue(currentPick.overall);
