@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { NFL_GAME_TEAMS, NCAA_GAME_TEAMS } from '../game/teams';
 import type { GameTeam } from '../game/teams';
 import { AppShell, C, GLOBAL_CSS } from '../components/AppShell';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 type League = 'nfl' | 'ncaa';
 
@@ -163,6 +164,7 @@ function TeamSlot({
 
 export function GameSelectPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [league, setLeague] = useState<League>('nfl');
   const [home, setHome] = useState<GameTeam | null>(null);
   const [away, setAway] = useState<GameTeam | null>(null);
@@ -205,10 +207,10 @@ export function GameSelectPage() {
           transition: 'background 600ms',
         }} />
 
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 820, margin: '0 auto', padding: '40px 24px 64px' }}>
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 820, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '40px 24px 64px' }}>
 
           {/* ── League toggle ── */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 36 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: isMobile ? 16 : 36 }}>
             <div style={{
               display: 'flex', gap: 4,
               background: C.panel, border: `1px solid ${C.border}`,
@@ -255,64 +257,141 @@ export function GameSelectPage() {
           </div>
 
           {/* ── VS screen ── */}
-          <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, marginBottom: 36 }}>
-            <TeamSlot
-              team={home} label="HOME"
-              active={picking === 'home'}
-              onClick={() => setPicking('home')}
-              side="left"
-            />
+          {isMobile ? (
+            /* Mobile: compact horizontal strip showing both selected teams */
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              {/* Home pill */}
+              <button
+                onClick={() => setPicking('home')}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 12px', borderRadius: 12,
+                  border: `1px solid ${picking === 'home' ? (home ? hexStr(home.primaryColor) + '70' : C.borderFoc) : C.border}`,
+                  background: home
+                    ? `linear-gradient(135deg, ${hexStr(home.primaryColor)}18, ${C.surface})`
+                    : C.surface,
+                  cursor: 'pointer', minHeight: 44,
+                  boxShadow: picking === 'home' ? `0 0 16px ${home ? hexStr(home.primaryColor) + '30' : C.blueFoc}` : 'none',
+                }}
+              >
+                {home ? (
+                  <>
+                    <TeamAvatar team={home} size={32} />
+                    <div style={{ textAlign: 'left', minWidth: 0 }}>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: C.blueBright, letterSpacing: '.12em', textTransform: 'uppercase' }}>HOME</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{home.abbreviation}</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', border: `2px dashed ${picking === 'home' ? C.borderFoc : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: C.txtMuted, flexShrink: 0 }}>?</div>
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: C.blueBright, letterSpacing: '.12em', textTransform: 'uppercase' }}>HOME</div>
+                      <div style={{ fontSize: 11, color: C.txtMuted }}>{picking === 'home' ? 'Selecting…' : 'Tap to pick'}</div>
+                    </div>
+                  </>
+                )}
+              </button>
 
-            {/* VS center */}
-            <div style={{
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 8,
-              minWidth: 56, flexShrink: 0,
-            }}>
-              <div style={{
-                fontSize: 28, fontWeight: 900, fontFamily: 'Impact, sans-serif',
-                color: canPlay ? C.txt : C.txtMuted,
-                letterSpacing: '.06em',
-                textShadow: canPlay ? `0 0 28px ${C.txt}40` : 'none',
-                transition: 'color 300ms, text-shadow 300ms',
-              }}>
+              {/* VS badge */}
+              <div style={{ flexShrink: 0, fontSize: 16, fontWeight: 900, fontFamily: 'Impact, sans-serif', color: canPlay ? C.txt : C.txtMuted, letterSpacing: '.06em' }}>
                 VS
               </div>
-              <AnimatePresence>
-                {canPlay && (
-                  <motion.div
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0, opacity: 0 }}
-                    style={{
-                      fontSize: 9, fontWeight: 800, letterSpacing: '.14em',
-                      color: C.green, textTransform: 'uppercase',
-                    }}
-                  >
-                    Ready
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
 
-            <TeamSlot
-              team={away} label="AWAY"
-              active={picking === 'away'}
-              onClick={() => setPicking('away')}
-              side="right"
-            />
-          </div>
+              {/* Away pill */}
+              <button
+                onClick={() => setPicking('away')}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 12px', borderRadius: 12,
+                  border: `1px solid ${picking === 'away' ? (away ? hexStr(away.primaryColor) + '70' : C.borderFoc) : C.border}`,
+                  background: away
+                    ? `linear-gradient(135deg, ${hexStr(away.primaryColor)}18, ${C.surface})`
+                    : C.surface,
+                  cursor: 'pointer', minHeight: 44, justifyContent: 'flex-end',
+                  boxShadow: picking === 'away' ? `0 0 16px ${away ? hexStr(away.primaryColor) + '30' : C.blueFoc}` : 'none',
+                }}
+              >
+                {away ? (
+                  <>
+                    <div style={{ textAlign: 'right', minWidth: 0 }}>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: C.red, letterSpacing: '.12em', textTransform: 'uppercase' }}>AWAY</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{away.abbreviation}</div>
+                    </div>
+                    <TeamAvatar team={away} size={32} />
+                  </>
+                ) : (
+                  <>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: C.red, letterSpacing: '.12em', textTransform: 'uppercase' }}>AWAY</div>
+                      <div style={{ fontSize: 11, color: C.txtMuted }}>{picking === 'away' ? 'Selecting…' : 'Tap to pick'}</div>
+                    </div>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', border: `2px dashed ${picking === 'away' ? C.borderFoc : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: C.txtMuted, flexShrink: 0 }}>?</div>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            /* Desktop: full card slots */
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, marginBottom: 36 }}>
+              <TeamSlot
+                team={home} label="HOME"
+                active={picking === 'home'}
+                onClick={() => setPicking('home')}
+                side="left"
+              />
+
+              {/* VS center */}
+              <div style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 8,
+                minWidth: 56, flexShrink: 0,
+              }}>
+                <div style={{
+                  fontSize: 28, fontWeight: 900, fontFamily: 'Impact, sans-serif',
+                  color: canPlay ? C.txt : C.txtMuted,
+                  letterSpacing: '.06em',
+                  textShadow: canPlay ? `0 0 28px ${C.txt}40` : 'none',
+                  transition: 'color 300ms, text-shadow 300ms',
+                }}>
+                  VS
+                </div>
+                <AnimatePresence>
+                  {canPlay && (
+                    <motion.div
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0, opacity: 0 }}
+                      style={{
+                        fontSize: 9, fontWeight: 800, letterSpacing: '.14em',
+                        color: C.green, textTransform: 'uppercase',
+                      }}
+                    >
+                      Ready
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <TeamSlot
+                team={away} label="AWAY"
+                active={picking === 'away'}
+                onClick={() => setPicking('away')}
+                side="right"
+              />
+            </div>
+          )}
 
           {/* ── Selecting prompt ── */}
           <p style={{
             fontSize: 10, fontWeight: 800, letterSpacing: '.2em', color: C.txtMuted,
-            textTransform: 'uppercase', textAlign: 'center', marginBottom: 18,
+            textTransform: 'uppercase', textAlign: 'center', marginBottom: isMobile ? 10 : 18,
           }}>
             {picking === 'home' ? '↓ Select Home Team' : '↓ Select Away Team'}
           </p>
 
           {/* ── Team grid ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMobile ? 6 : 8, marginBottom: 16 }}>
             {teams.map(team => {
               const isHome    = home?.id === team.id;
               const isAway    = away?.id === team.id;
@@ -328,7 +407,7 @@ export function GameSelectPage() {
                   disabled={disabled}
                   style={{
                     position: 'relative',
-                    padding: '12px 8px',
+                    padding: isMobile ? '10px 6px' : '12px 8px',
                     borderRadius: 12,
                     border: `1px solid ${
                       isHome ? C.blueBright + '70'
@@ -449,7 +528,7 @@ export function GameSelectPage() {
                 exit={{ opacity: 0 }}
                 style={{
                   background: C.surface, border: `1px solid ${C.border}`,
-                  borderRadius: 14, padding: '18px 24px', marginBottom: 16,
+                  borderRadius: 14, padding: isMobile ? '12px 14px' : '18px 24px', marginBottom: 12,
                 }}
               >
                 {(
