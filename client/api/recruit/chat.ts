@@ -1,7 +1,8 @@
+/**
+ * Vercel Serverless Function — /api/recruit/chat
+ * Uses native fetch (Node 20 built-in) to avoid node-fetch header validation issues.
+ */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const PERSONALITY_DESCRIPTIONS: Record<string, string> = {
   homesick: 'You are deeply family-oriented. Being close to home is your number one priority. You think about your mom at every game, your little brothers who look up to you. Distance is a dealbreaker unless they give you a really compelling reason.',
@@ -31,30 +32,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const {
-    recruitName,
-    recruitStars,
-    position,
-    hometown,
-    state: homeState,
-    personalityType,
-    priorities,
-    currentInterest,
-    schoolName,
-    schoolConference,
-    schoolPrestige,
-    schoolNFLPicks,
-    schoolChampionships,
-    schoolFacilitiesRating,
-    schoolAcademicsRating,
-    userMessage,
-    conversationHistory = [],
-    backstory,
-    weekNumber,
+    recruitName, recruitStars, position, hometown,
+    state: homeState, personalityType, priorities,
+    currentInterest, schoolName, schoolConference,
+    schoolPrestige, schoolNFLPicks, schoolChampionships,
+    schoolFacilitiesRating, schoolAcademicsRating,
+    userMessage, conversationHistory = [], backstory, weekNumber,
   } = req.body;
 
   if (!recruitName || !userMessage) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
+
+  const apiKey = (process.env.ANTHROPIC_API_KEY ?? '').trim();
+  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
   // Build top 3 priorities list
   const priorityEntries = Object.entries(priorities ?? {}) as [string, number][];
@@ -63,24 +54,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Interest level context
   let interestContext: string;
-  if (currentInterest < 20) {
-    interestContext = 'very low — you barely know this school and are mostly humoring the call';
-  } else if (currentInterest < 40) {
-    interestContext = 'low — you\'ve heard of them but they aren\'t really on your list';
-  } else if (currentInterest < 60) {
-    interestContext = 'moderate — they\'re on your radar, you\'re listening';
-  } else if (currentInterest < 75) {
-    interestContext = 'solid — this school is in your top consideration, you like what you\'ve heard';
-  } else if (currentInterest < 85) {
-    interestContext = 'high — this is one of your top schools, you\'re genuinely excited';
-  } else {
-    interestContext = 'very high — this is your leader, you\'re basically ready to commit if they push the right buttons';
-  }
+  if (currentInterest < 20) interestContext = 'very low — you barely know this school and are mostly humoring the call';
+  else if (currentInterest < 40) interestContext = 'low — you\'ve heard of them but they aren\'t really on your list';
+  else if (currentInterest < 60) interestContext = 'moderate — they\'re on your radar, you\'re listening';
+  else if (currentInterest < 75) interestContext = 'solid — this school is in your top consideration, you like what you\'ve heard';
+  else if (currentInterest < 85) interestContext = 'high — this is one of your top schools, you\'re genuinely excited';
+  else interestContext = 'very high — this is your leader, you\'re basically ready to commit if they push the right buttons';
 
-  // Personality description
   const personalityDesc = PERSONALITY_DESCRIPTIONS[personalityType] ?? PERSONALITY_DESCRIPTIONS['ambitious'];
 
-  // School quality context
   const schoolStrengths: string[] = [];
   if (schoolNFLPicks >= 20) schoolStrengths.push(`elite NFL pipeline (${schoolNFLPicks} draft picks last 5 years)`);
   else if (schoolNFLPicks >= 12) schoolStrengths.push(`solid NFL pipeline (${schoolNFLPicks} draft picks last 5 years)`);
@@ -141,39 +123,69 @@ The interest_delta MUST reflect your personality type and priorities. A mercenar
 
   // Build message history
   const messages: { role: 'user' | 'assistant'; content: string }[] = [];
-
   for (const msg of conversationHistory) {
-    if (msg.role === 'coach') {
-      messages.push({ role: 'user', content: msg.content });
-    } else {
-      messages.push({ role: 'assistant', content: msg.content });
-    }
+    if (msg.role === 'coach') messages.push({ role: 'user', content: msg.content });
+    else messages.push({ role: 'assistant', content: msg.content });
   }
-
-  // Add current message
   messages.push({ role: 'user', content: userMessage });
 
   try {
-    const stream = await client.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 300,
-      stream: true,
-      system: systemPrompt,
-      messages,
+    const upstream = await (globalThis as any).fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 300,
+        stream: true,
+        system: systemPrompt,
+        messages,
+      }),
     });
+
+    if (!upstream.ok) {
+      const errText = await upstream.text().catch(() => 'unknown');
+      console.error('[recruit/chat] upstream error', upstream.status, errText);
+      return res.status(502).json({ error: 'Anthropic API error', detail: errText.slice(0, 300) });
+    }
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
     res.setHeader('Cache-Control', 'no-cache');
 
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        res.write(event.delta.text);
+    const reader = (upstream.body as any).getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(data);
+          if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+            res.write(evt.delta.text);
+          }
+        } catch { /* skip malformed SSE */ }
       }
     }
+
     res.end();
-  } catch (err) {
+  } catch (err: any) {
     console.error('[recruit/chat]', err);
-    res.status(500).json({ error: 'Failed to generate recruit response' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate recruit response', detail: String(err?.message ?? err).slice(0, 200) });
+    } else {
+      res.end();
+    }
   }
 }
