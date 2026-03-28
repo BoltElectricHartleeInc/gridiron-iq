@@ -147,6 +147,7 @@ export default class FootballGame extends Phaser.Scene {
 
   // Visual FX
   private crowdWave?: Phaser.GameObjects.Graphics;
+  private carrierIndicator?: Phaser.GameObjects.Graphics;
   private blurOverlay?: Phaser.GameObjects.Rectangle;
   private tackleFlash?: Phaser.GameObjects.Rectangle;
   private inCanvasBox?: Phaser.GameObjects.Container;
@@ -263,6 +264,7 @@ export default class FootballGame extends Phaser.Scene {
     }
 
     // Debug overlay
+    this.updateCarrierIndicator();
     if (this.debugVisible) this.updateDebugOverlay();
   }
 
@@ -275,21 +277,56 @@ export default class FootballGame extends Phaser.Scene {
 
   private redrawField(): void {
     this.fieldGfx.clear();
-    this.fieldGfx.fillStyle(0x2f8f2f, 1);
+
+    // ── Stadium surround ────────────────────────────────────────────────────
+    this.fieldGfx.fillStyle(0x0e1117, 1);
     this.fieldGfx.fillRect(0, 0, 1280, 720);
-    this.fieldGfx.fillStyle(0x237523, 1);
-    this.fieldGfx.fillRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
-    this.fieldGfx.lineStyle(2, 0xffffff, 0.35);
-    for (let x = FIELD.left; x <= FIELD.right; x += 56) {
+
+    // ── Alternating turf stripes (classic NFL lawn-mower pattern) ───────────
+    const sw = 56; // stripe width = one yard-line interval
+    const fieldH = FIELD.bottom - FIELD.top;
+    for (let i = 0; i < 20; i++) {
+      const sx = FIELD.left + i * sw;
+      const light = i % 2 === 0;
+      this.fieldGfx.fillStyle(light ? 0x2d8a2d : 0x226622, 1);
+      this.fieldGfx.fillRect(sx, FIELD.top, Math.min(sw, FIELD.right - sx), fieldH);
+    }
+
+    // ── End zones ──────────────────────────────────────────────────────────
+    // Home (left) — team blue
+    this.fieldGfx.fillStyle(0x1a3a6e, 0.82);
+    this.fieldGfx.fillRect(FIELD.left, FIELD.top, sw, fieldH);
+    // Away (right) — team crimson
+    this.fieldGfx.fillStyle(0x6e1a1a, 0.82);
+    this.fieldGfx.fillRect(FIELD.right - sw, FIELD.top, sw, fieldH);
+
+    // ── Hash marks ─────────────────────────────────────────────────────────
+    const hashY1 = FIELD.top + fieldH * 0.33;
+    const hashY2 = FIELD.top + fieldH * 0.67;
+    this.fieldGfx.lineStyle(2, 0xffffff, 0.55);
+    for (let x = FIELD.left + sw; x < FIELD.right; x += sw) {
+      this.fieldGfx.lineBetween(x - 5, hashY1, x + 5, hashY1);
+      this.fieldGfx.lineBetween(x - 5, hashY2, x + 5, hashY2);
+    }
+
+    // ── Major yard lines (every other stripe = 10 yards) ───────────────────
+    this.fieldGfx.lineStyle(1.5, 0xffffff, 0.28);
+    for (let x = FIELD.left; x <= FIELD.right; x += sw) {
       this.fieldGfx.lineBetween(x, FIELD.top, x, FIELD.bottom);
     }
-    this.fieldGfx.lineStyle(3, 0xffffff, 0.8);
-    this.fieldGfx.strokeRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
+
+    // ── Field border ────────────────────────────────────────────────────────
+    this.fieldGfx.lineStyle(3, 0xffffff, 0.9);
+    this.fieldGfx.strokeRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, fieldH);
+
+    // ── Line of scrimmage (cyan) ─────────────────────────────────────────────
     const losX = this.yardToX(this.yardLine);
-    this.fieldGfx.lineStyle(3, 0x00d9ff, 0.9);
+    this.fieldGfx.lineStyle(3, 0x00d9ff, 0.95);
     this.fieldGfx.lineBetween(losX, FIELD.top, losX, FIELD.bottom);
+
+    // ── First down line (gold) ───────────────────────────────────────────────
     const firstX = this.yardToX(this.yardLine + this.distance);
-    this.fieldGfx.lineStyle(3, 0xffdd00, 0.9);
+    this.fieldGfx.lineStyle(3, 0xffdd00, 0.95);
     this.fieldGfx.lineBetween(firstX, FIELD.top, firstX, FIELD.bottom);
   }
 
@@ -302,15 +339,40 @@ export default class FootballGame extends Phaser.Scene {
     this.blurOverlay = this.add.rectangle(640, 360, 1280, 720, 0xffffff, 0).setDepth(45).setScrollFactor(0);
     this.tackleFlash = this.add.rectangle(640, 360, 1280, 720, 0xffffff, 0).setDepth(46).setScrollFactor(0);
     this.crowdWave = this.add.graphics().setDepth(5);
+    this.carrierIndicator = this.add.graphics().setDepth(19);
     this.drawCrowdBand();
   }
 
   private drawCrowdBand(): void {
     if (!this.crowdWave) return;
     this.crowdWave.clear();
-    this.crowdWave.fillStyle(0x1f2937, 1);
-    this.crowdWave.fillRect(0, 0, 1280, 70);
-    this.crowdWave.fillRect(0, 650, 1280, 70);
+
+    // Base — dark concrete/stands color
+    this.crowdWave.fillStyle(0x0e1117, 1);
+    this.crowdWave.fillRect(0, 0, 1280, 80);
+    this.crowdWave.fillRect(0, 640, 1280, 80);
+
+    // Seat rows — deterministic pattern so it doesn't flicker each redraw
+    const rowColors = [0x1e3a5f, 0x7f1d1d, 0x374151, 0x1e40af, 0x44403c];
+    const seatW = 13;
+    const seatH = 10;
+    const cols = Math.ceil(1280 / (seatW + 2));
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < cols; col++) {
+        const ci = (row * 3 + col * 7) % rowColors.length;
+        const alpha = 0.25 + ((row * 17 + col * 11) % 10) * 0.03;
+        this.crowdWave.fillStyle(rowColors[ci], alpha);
+        // Top stands
+        this.crowdWave.fillRect(col * (seatW + 2) + 1, row * (seatH + 3) + 6, seatW, seatH);
+        // Bottom stands
+        this.crowdWave.fillRect(col * (seatW + 2) + 1, 648 + row * (seatH + 3), seatW, seatH);
+      }
+    }
+
+    // Stadium fascia line — bright stripe separating field from stands
+    this.crowdWave.fillStyle(0xffffff, 0.12);
+    this.crowdWave.fillRect(0, 76, 1280, 4);
+    this.crowdWave.fillRect(0, 640, 1280, 4);
   }
 
   private createTeams(): void {
@@ -426,9 +488,56 @@ export default class FootballGame extends Phaser.Scene {
 
   private makePlayer(x: number, y: number, color: number, label: string): Phaser.GameObjects.Container {
     const c = this.add.container(x, y);
-    const body = this.add.rectangle(0, 0, 18, 18, color).setStrokeStyle(1, 0xffffff, 0.4);
-    const txt = this.add.text(-7, -6, label.slice(0, 2), { color: "#ffffff", fontSize: "8px", fontFamily: "system-ui" });
-    c.add([body, txt]);
+
+    // Linemen are slightly smaller and less prominent
+    const isLineman = label.startsWith("OL") || label.startsWith("DL");
+    const bw = isLineman ? 15 : 18;
+    const bh = isLineman ? 17 : 22;
+
+    // Lighter shade for helmet (blend toward white)
+    const r = Math.min(255, ((color >> 16) & 0xff) + 55);
+    const g = Math.min(255, ((color >> 8)  & 0xff) + 55);
+    const b = Math.min(255, ( color        & 0xff) + 55);
+    const helmetColor = (r << 16) | (g << 8) | b;
+
+    // 1. Drop shadow
+    const shadow = this.add.ellipse(3, 5, bw + 8, 7, 0x000000, 0.38);
+
+    // 2. Body — oval jersey shape
+    const body = this.add.ellipse(0, 2, bw, bh, color);
+    body.setStrokeStyle(1.5, 0xffffff, 0.45);
+
+    // 3. Shoulder pads — wider bar across the top of the body
+    const pads = this.add.rectangle(0, 2 - bh / 2 + 6, bw + 6, 6, color);
+    pads.setStrokeStyle(1, 0xffffff, 0.25);
+
+    // 4. Thin jersey stripe down the center
+    const stripe = this.add.rectangle(0, 4, 3, bh - 10, 0xffffff, 0.18);
+
+    // 5. Helmet dome — circle sitting on top of body
+    const helmet = this.add.circle(0, 2 - bh / 2 + 1, bw / 2 - 1, helmetColor);
+    helmet.setStrokeStyle(1.5, 0xffffff, 0.55);
+
+    // 6. Facemask — thin bar on the front of the helmet
+    const faceX = bw / 2 - 3;
+    const faceY = 2 - bh / 2 + 1;
+    const facemask = this.add.rectangle(faceX, faceY, 2, 7, 0xd0d0d0, 0.85);
+
+    // 7. Helmet glint (highlight shine)
+    const glint = this.add.ellipse(-(bw / 6), 2 - bh / 2 - 2, 5, 3, 0xffffff, 0.32);
+
+    // 8. Position label — bold, readable, centered on jersey body
+    const posLabel = label.replace(/\d+$/, "").slice(0, 2);
+    const txt = this.add.text(0, 5, posLabel, {
+      color: "#ffffff",
+      fontSize: "7px",
+      fontFamily: "system-ui",
+      fontStyle: "bold",
+      stroke: "#00000088",
+      strokeThickness: 2,
+    }).setOrigin(0.5, 0.5);
+
+    c.add([shadow, body, pads, stripe, helmet, facemask, glint, txt]);
     c.setDepth(20);
     return c;
   }
@@ -1242,6 +1351,18 @@ export default class FootballGame extends Phaser.Scene {
   }
 
   // ── Debug overlay ─────────────────────────────────────────────────────────
+
+  private updateCarrierIndicator(): void {
+    if (!this.carrierIndicator || !this.carrier) return;
+    this.carrierIndicator.clear();
+    // Cyan pulse ring under the controlled player so you always know who you are
+    const pulse = 0.55 + Math.sin(this.time.now / 200) * 0.25;
+    this.carrierIndicator.lineStyle(2.5, 0x00d9ff, pulse);
+    this.carrierIndicator.strokeCircle(this.carrier.x, this.carrier.y, 15);
+    // Small filled dot at feet
+    this.carrierIndicator.fillStyle(0x00d9ff, 0.3);
+    this.carrierIndicator.fillCircle(this.carrier.x, this.carrier.y, 8);
+  }
 
   private updateDebugOverlay(): void {
     this.debugOverlay?.destroy();
