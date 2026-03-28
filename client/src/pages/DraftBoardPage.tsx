@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDraftStore } from '../store/draftStore';
 import { NFL_TEAMS } from '../data/teams';
 import DraftBoard from '../components/draft/DraftBoard';
@@ -842,7 +843,37 @@ function DraftBoardLayout({
 
 // ─── Store-connected page (used by App router with no props) ─────────────────
 export function DraftBoardPage() {
-  const { session, availableProspects } = useDraftStore();
+  const navigate = useNavigate();
+  const { session, availableProspects, simulateNextPick, simulateToUserPick } = useDraftStore();
+
+  const [paused, setPaused] = useState(false);
+  const [speed, setSpeed] = useState<SimulationSpeed>('NORMAL');
+  const simRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const speedMs: Record<SimulationSpeed, number> = { FAST: 600, NORMAL: 1400, SLOW: 2800 };
+
+  // ── Simulation engine: auto-advance AI picks ──────────────────────────────
+  const tick = useCallback(() => {
+    if (!session || session.status !== 'drafting' || paused) return;
+    const currentPick = session.picks[session.currentPickIndex];
+    if (!currentPick) return;
+    if (currentPick.isUserPick) return; // stop and wait for user
+    simulateNextPick();
+  }, [session, paused, simulateNextPick]);
+
+  useEffect(() => {
+    if (simRef.current) clearTimeout(simRef.current);
+    if (!session || session.status !== 'drafting' || paused) return;
+    const currentPick = session.picks[session.currentPickIndex];
+    if (!currentPick || currentPick.isUserPick) return;
+    simRef.current = setTimeout(tick, speedMs[speed]);
+    return () => { if (simRef.current) clearTimeout(simRef.current); };
+  }, [session?.currentPickIndex, paused, speed, tick]);
+
+  // Navigate to results when draft completes
+  useEffect(() => {
+    if (session?.status === 'complete') navigate('/draft/results');
+  }, [session?.status]);
 
   const teamMap = useMemo(() => {
     const m = new Map<string, typeof NFL_TEAMS[number]>();
@@ -904,6 +935,10 @@ export function DraftBoardPage() {
     ? (session.picks[session.currentPickIndex]?.overall ?? 1)
     : 1;
 
+  const isUserTurn = session
+    ? (session.picks[session.currentPickIndex]?.isUserPick ?? false)
+    : false;
+
   return (
     <DraftBoardLayout
       userTeam={userTeam}
@@ -911,6 +946,11 @@ export function DraftBoardPage() {
       picks={picks}
       prospects={prospects}
       currentOverallPick={currentOverallPick}
+      paused={paused}
+      speed={speed}
+      onPauseToggle={() => setPaused(p => !p)}
+      onSpeedChange={setSpeed}
+      onSkipToMyPick={() => { setPaused(false); simulateToUserPick(); }}
     />
   );
 }
