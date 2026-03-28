@@ -487,6 +487,11 @@ function DraftBoardLayout({
 
   const closeProspectCard = () => setSelectedProspect(null);
 
+  // Auto-switch to big board when it's user's turn on mobile
+  useEffect(() => {
+    if (isMobile && isUsersTurn) setMobileTab('board');
+  }, [isMobile, isUsersTurn]);
+
   // ─── MOBILE LAYOUT ──────────────────────────────────────────────────────────
   if (isMobile) {
     const roundGroups = picks.reduce<Record<number, typeof picks>>((acc, p) => {
@@ -589,25 +594,44 @@ function DraftBoardLayout({
                   }}>{pos}</button>
                 ))}
               </div>
-              {filteredProspects.slice(0, 60).map((p, i) => {
+              {filteredProspects.length === 0 && (
+                <div style={{ textAlign: 'center', color: T.txtMuted, padding: '40px 20px', fontSize: 13 }}>
+                  No prospects remaining at this position
+                </div>
+              )}
+              {filteredProspects.map((p, i) => {
                 const pal = POS[p.position] ?? { text: T.txtSub, bg: T.panel, border: T.border };
                 return (
-                  <button key={p.id ?? p.fullName} onClick={() => { setSelectedProspect(p); setMobileTab('board'); }} style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer',
-                    borderBottom: `1px solid ${T.border}30`, textAlign: 'left', minHeight: 52,
+                  <div key={p.id ?? p.fullName} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px',
+                    borderBottom: `1px solid ${T.border}30`, minHeight: 52,
+                    background: isUsersTurn ? `${T.green}05` : 'transparent',
                   }}>
-                    <span style={{ fontSize: 11, color: T.txtMuted, fontWeight: 700, minWidth: 24 }}>{i + 1}</span>
-                    <span style={{
-                      fontSize: 9, fontWeight: 800, borderRadius: 6, padding: '3px 7px',
-                      background: pal.bg, border: `1px solid ${pal.border}`, color: pal.text, flexShrink: 0,
-                    }}>{p.position}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: T.txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.fullName}</div>
-                      <div style={{ fontSize: 11, color: T.txtSub }}>{p.school}</div>
-                    </div>
-                    <span style={{ fontSize: 18, fontWeight: 900, color: gradeColor(p.grade), flexShrink: 0 }}>{gradeLetter(p.grade)}</span>
-                  </button>
+                    <button onClick={() => setSelectedProspect(p)} style={{
+                      flex: 1, display: 'flex', alignItems: 'center', gap: 10,
+                      background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, minWidth: 0,
+                    }}>
+                      <span style={{ fontSize: 11, color: T.txtMuted, fontWeight: 700, minWidth: 24, flexShrink: 0 }}>{i + 1}</span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, borderRadius: 6, padding: '3px 7px',
+                        background: pal.bg, border: `1px solid ${pal.border}`, color: pal.text, flexShrink: 0,
+                      }}>{p.position}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: T.txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.fullName}</div>
+                        <div style={{ fontSize: 11, color: T.txtSub }}>{p.school}</div>
+                      </div>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: gradeColor(p.grade), flexShrink: 0, marginRight: isUsersTurn ? 8 : 0 }}>{gradeLetter(p.grade)}</span>
+                    </button>
+                    {isUsersTurn && (
+                      <button onClick={() => setSelectedProspect(p)} style={{
+                        flexShrink: 0, padding: '8px 14px',
+                        background: `linear-gradient(135deg, #1565C0, #2196F3)`,
+                        border: 'none', borderRadius: 8, color: '#fff',
+                        fontWeight: 800, fontSize: 11, cursor: 'pointer', letterSpacing: '.04em',
+                      }}>DRAFT</button>
+                    )}
+                  </div>
                 );
               })}
             </div>
