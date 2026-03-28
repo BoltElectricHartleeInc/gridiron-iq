@@ -902,24 +902,45 @@ function DraftBoardLayout({
             <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.14em', marginBottom: 8 }}>
               MY PICKS — {myCompletedPicks.length} of {myPicksTotal}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {myUpcomingPicks.slice(0, 6).map((pick) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {/* ── Completed picks: player name + grade ── */}
+              {myCompletedPicks.map((pick) => {
+                const fullName = pick.player?.fullName ?? pick.player?.name ?? '—';
+                const last = fullName.split(' ').slice(-1)[0];
+                const grade = pick.player?.grade ?? 70;
+                const gradeLabel = grade >= 90 ? 'A+' : grade >= 85 ? 'A' : grade >= 80 ? 'A-' : grade >= 77 ? 'B+' : grade >= 73 ? 'B' : grade >= 70 ? 'B-' : 'C+';
+                const gradeColor = grade >= 85 ? T.green : grade >= 77 ? T.blueBright : grade >= 70 ? T.gold : T.txtSub;
+                return (
+                  <div
+                    key={`my-done-${pick.overall}`}
+                    style={{
+                      display: 'grid', gridTemplateColumns: '32px 1fr auto auto',
+                      gap: 5, alignItems: 'center', padding: '5px 7px',
+                      borderRadius: 7, border: `1px solid ${T.green}30`,
+                      background: `${T.green}08`,
+                    }}
+                  >
+                    <span style={{ fontSize: 9, color: T.txtMuted, fontWeight: 700 }}>R{pick.round}</span>
+                    <span style={{ fontSize: 11, color: T.txt, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{last}</span>
+                    <span style={{ fontSize: 9, color: T.txtSub, fontWeight: 600 }}>{pick.player?.position}</span>
+                    <span style={{ fontSize: 11, fontWeight: 900, color: gradeColor }}>{gradeLabel}</span>
+                  </div>
+                );
+              })}
+              {/* ── Upcoming picks ── */}
+              {myUpcomingPicks.slice(0, Math.max(0, 6 - myCompletedPicks.length)).map((pick) => (
                 <div
                   key={`my-proj-${pick.round}-${pick.overall}`}
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: '38px 44px 1fr',
-                    gap: 6,
-                    alignItems: 'center',
-                    padding: '5px 6px',
-                    borderRadius: 7,
-                    border: `1px solid ${T.border}`,
-                    background: T.elevated,
+                    display: 'grid', gridTemplateColumns: '32px 44px 1fr',
+                    gap: 5, alignItems: 'center', padding: '5px 7px',
+                    borderRadius: 7, border: `1px dashed ${T.border}`,
+                    background: T.elevated, opacity: 0.65,
                   }}
                 >
-                  <span style={{ fontSize: 10, color: T.txtSub, fontWeight: 700 }}>RD {pick.round}</span>
-                  <span style={{ fontSize: 10, color: T.txtMuted, fontWeight: 700 }}>#{pick.overall}</span>
-                  <span style={{ fontSize: 11, color: T.txt, fontWeight: 700 }}>{pick.positionProjection}</span>
+                  <span style={{ fontSize: 9, color: T.txtSub, fontWeight: 700 }}>R{pick.round}</span>
+                  <span style={{ fontSize: 9, color: T.txtMuted, fontWeight: 700 }}>#{pick.overall}</span>
+                  <span style={{ fontSize: 10, color: T.txtSub, fontWeight: 700 }}>{pick.positionProjection}</span>
                 </div>
               ))}
             </div>

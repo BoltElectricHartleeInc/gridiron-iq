@@ -585,9 +585,17 @@ function CareerHub({ player }: { player: CareerPlayer }) {
   const legacy   = legacyPercentile(player.legacyScore);
   const attrKeys = getAttributeKeys(player.position);
 
-  const isCollege = ['college_freshman', 'college_sophomore', 'college_junior', 'college_senior'].includes(player.stage);
-  const isNFL     = ['nfl_rookie', 'nfl_year2', 'nfl_year3plus'].includes(player.stage);
+  const isHighSchool = player.stage === 'highschool';
+  const isCollege  = ['college_freshman', 'college_sophomore', 'college_junior', 'college_senior'].includes(player.stage);
+  const isNFL      = ['nfl_rookie', 'nfl_year2', 'nfl_year3plus'].includes(player.stage);
+  const inDraftLimbo = player.stage === 'nfl_draft'; // landed here via ADVANCE SEASON
+  const canPlay    = isHighSchool || isCollege || isNFL;
   const canDeclare = ['college_junior', 'college_senior'].includes(player.stage);
+
+  // If somehow in nfl_draft stage (via advance season), auto-open draft night
+  useEffect(() => {
+    if (inDraftLimbo) setShowDraftNight(true);
+  }, [inDraftLimbo]);
 
   const simGame = () => {
     const stats = simGameStats(player.position, player.overallRating);
@@ -649,12 +657,14 @@ function CareerHub({ player }: { player: CareerPlayer }) {
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {(isCollege || isNFL) && (
-              <Btn onClick={simGame} accent={C.green}>SIM GAME</Btn>
+            {canPlay && (
+              <Btn onClick={simGame} accent={C.green}>
+                {isHighSchool ? 'SIM HS SEASON' : 'SIM GAME'}
+              </Btn>
             )}
-            {(isCollege || isNFL) && (
+            {canPlay && (
               <Btn variant="ghost" onClick={() => { advanceSeason(); setSimResult(null); }}>
-                ADVANCE SEASON
+                {isHighSchool ? 'COMMIT TO COLLEGE' : isCollege ? 'ADVANCE SEASON' : 'NEXT SEASON'}
               </Btn>
             )}
             {canDeclare && !isNFL && (
