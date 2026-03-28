@@ -131,6 +131,19 @@ export function PreDraftPage() {
   const [theirSendPicks, setTheirSendPicks] = useState<number[]>([]);
   const [tradeResult, setTradeResult] = useState<'accepted' | 'rejected' | null>(null);
 
+  // Incoming offer from an AI team targeting the user's picks
+  interface IncomingOffer {
+    id: string;
+    fromTeam: NFLTeam;
+    wantsPick: number;       // user's pick they want
+    offersPicks: number[];   // their picks they're sending
+    offersValue: number;
+    wantsValue: number;
+    narrative: string;
+  }
+  const [incomingOffer, setIncomingOffer] = useState<IncomingOffer | null>(null);
+  const incomingOfferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Activity feed state
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
   const [breakingTrade, setBreakingTrade] = useState<string | null>(null);
@@ -143,6 +156,129 @@ export function PreDraftPage() {
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const isHecticRef = useRef(false);
+
+  // ── Incoming offer generator ─────────────────────────────────────────────
+  // Pick-position trade probability (mirrors real NFL draft data):
+  // Top 5: rare | 6-15: hottest | 16-32: active | R2: moderate | R3+: declining
+  function pickTradeProb(overall: number): number {
+    if (overall <= 5)  return 0.10;
+    if (overall <= 10) return 0.55;
+    if (overall <= 15) return 0.50;
+    if (overall <= 32) return 0.38;
+    if (overall <= 64) return 0.28;  // R2
+    if (overall <= 96) return 0.18;  // R3
+    if (overall <= 128) return 0.12; // R4
+    return 0.07;                     // R5-7
+  }
+
+  const positionLabels: Record<string, string> = {
+    QB: 'a franchise QB', WR: 'a wide receiver', EDGE: 'an edge rusher',
+    OT: 'an offensive tackle', CB: 'a cornerback', DT: 'a defensive tackle',
+    LB: 'a linebacker', S: 'a safety', TE: 'a tight end', RB: 'a running back',
+    OG: 'a guard', C: 'a center', DE: 'an edge rusher', OLB: 'a pass rusher',
+  };
+
+  const generateIncomingOffer = useCallback(() => {
+    const s = sessionRef.current;
+    if (!s || incomingOffer) return;
+
+    const userPicks = s.picks
+      .filter(p => p.teamId === s.userTeamId && !p.prospect)
+      .map(p => p.overall)
+      .sort((a, b) => a - b);
+
+    if (userPicks.length === 0) return;
+
+    // Pick a random one of the user's picks, weighted toward valuable ones
+    // More likely to get called about early picks
+    const weights = userPicks.map(o => 1 / Math.sqrt(o));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let rand = Math.random() * totalWeight;
+    let targetPick = userPicks[0];
+    for (let i = 0; i < userPicks.length; i++) {
+      rand -= weights[i];
+      if (rand <= 0) { targetPick = userPicks[i]; break; }
+    }
+
+    // Check if this pick should get an offer based on real-data probabilities
+    if (Math.random() > pickTradeProb(targetPick)) return;
+
+    // Find a random AI team that would want to move up to this pick
+    const allAITeams = NFL_TEAMS.filter(t => t.id !== s.userTeamId);
+    const fromTeam = allAITeams[Math.floor(Math.random() * allAITeams.length)];
+    if (!fromTeam) return;
+
+    const targetValue = getPickValue(targetPick);
+
+    // Build their offer: picks that total 5-20% over the pick's value (they overpay to move up)
+    const theirPicks = s.picks
+      .filter(p => p.teamId === fromTeam.id && !p.prospect && p.overall > targetPick)
+      .map(p => p.overall)
+      .sort((a, b) => a - b);
+
+    if (theirPicks.length === 0) return;
+
+    const targetOfferValue = targetValue * (1.05 + Math.random() * 0.20);
+    const offersPicks: number[] = [];
+    let offersValue = 0;
+    for (const pick of theirPicks) {
+      if (offersValue >= targetOfferValue) break;
+      offersPicks.push(pick);
+      offersValue += getPickValue(pick);
+      if (offersValue >= targetOfferValue * 0.85) break;
+    }
+    if (offersPicks.length === 0) return;
+
+    const posLabel = positionLabels[fromTeam.needs[0]] ?? 'a premium player';
+    const pickLabel = targetPick <= 32
+      ? `the #${targetPick} overall pick`
+      : `your ${getPickLabelShort(targetPick)} selection`;
+    const narrative = offersPicks.length === 1
+      ? `${fromTeam.city} is calling — they want ${pickLabel} to grab ${posLabel}. Offering #${offersPicks[0]} in return.`
+      : `${fromTeam.city} is packaging ${offersPicks.map(p => getPickLabelShort(p)).join(' + ')} to move up to ${pickLabel} for ${posLabel}.`;
+
+    setIncomingOffer({
+      id: crypto.randomUUID(),
+      fromTeam,
+      wantsPick: targetPick,
+      offersPicks,
+      offersValue,
+      wantsValue: targetValue,
+      narrative,
+    });
+
+    // Auto-dismiss after 45 seconds if not acted on
+    if (incomingOfferTimerRef.current) clearTimeout(incomingOfferTimerRef.current);
+    incomingOfferTimerRef.current = setTimeout(() => setIncomingOffer(null), 45000);
+  }, [incomingOffer]);
+
+  const handleAcceptIncoming = () => {
+    if (!incomingOffer || !session) return;
+    acceptTrade({
+      offeringTeamId: incomingOffer.fromTeam.id,
+      receivingTeamId: session.userTeamId,
+      offeringPicks: incomingOffer.offersPicks,
+      receivingPicks: [incomingOffer.wantsPick],
+      jimJohnsonValue: incomingOffer.offersValue - incomingOffer.wantsValue,
+    });
+    const headline = `YOU ACCEPTED: ${incomingOffer.fromTeam.abbreviation} gets #${incomingOffer.wantsPick} for ${incomingOffer.offersPicks.map(p => getPickLabelShort(p)).join(' + ')}`;
+    setActivityFeed(prev => [{
+      id: crypto.randomUUID(), type: 'trade' as const,
+      team1Abbr: incomingOffer.fromTeam.abbreviation,
+      team2Abbr: userTeam?.abbreviation ?? 'YOU',
+      picks1: incomingOffer.offersPicks, picks2: [incomingOffer.wantsPick],
+      value1: incomingOffer.offersValue, value2: incomingOffer.wantsValue,
+      executed: true, time: formatTime(), headline,
+    }, ...prev].slice(0, 50));
+    setTotalTradesExecuted(n => n + 1);
+    setIncomingOffer(null);
+    if (incomingOfferTimerRef.current) clearTimeout(incomingOfferTimerRef.current);
+  };
+
+  const handleDeclineIncoming = () => {
+    setIncomingOffer(null);
+    if (incomingOfferTimerRef.current) clearTimeout(incomingOfferTimerRef.current);
+  };
 
   // ── AI activity engine ───────────────────────────────────────────────────
   const scheduleNextActivity = useCallback(() => {
@@ -236,6 +372,11 @@ export function PreDraftPage() {
       setActivityFeed(prev => [item, ...prev].slice(0, 50));
       if (feedRef.current) feedRef.current.scrollTop = 0;
 
+      // ~20% chance each activity cycle also tries to generate an incoming offer for the user
+      if (Math.random() < 0.20) {
+        generateIncomingOffer();
+      }
+
       scheduleNextActivity();
     }, delay);
   }, [acceptTrade]);
@@ -251,6 +392,7 @@ export function PreDraftPage() {
   useEffect(() => {
     return () => {
       if (breakingTimerRef.current) clearTimeout(breakingTimerRef.current);
+      if (incomingOfferTimerRef.current) clearTimeout(incomingOfferTimerRef.current);
     };
   }, []);
 
@@ -398,6 +540,103 @@ export function PreDraftPage() {
 
   const tradePanel = (
     <div style={{ padding: isMobile ? '14px 14px' : '18px 20px' }}>
+
+      {/* ── Incoming offer banner ── */}
+      <AnimatePresence>
+        {incomingOffer && (
+          <motion.div
+            key={incomingOffer.id}
+            initial={{ opacity: 0, y: -12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ duration: 0.22 }}
+            style={{
+              marginBottom: 18,
+              background: `linear-gradient(135deg, ${incomingOffer.fromTeam.primaryColor}18, ${incomingOffer.fromTeam.primaryColor}08)`,
+              border: `1.5px solid ${incomingOffer.fromTeam.primaryColor}70`,
+              borderRadius: 14, overflow: 'hidden',
+              boxShadow: `0 0 28px -8px ${incomingOffer.fromTeam.primaryColor}50`,
+            }}
+          >
+            {/* pulsing top bar */}
+            <motion.div
+              animate={{ opacity: [1, 0.4, 1] }}
+              transition={{ repeat: Infinity, duration: 1.2 }}
+              style={{ height: 3, background: incomingOffer.fromTeam.primaryColor, borderRadius: '14px 14px 0 0' }}
+            />
+            <div style={{ padding: isMobile ? '12px 14px' : '14px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                  background: `${incomingOffer.fromTeam.primaryColor}25`,
+                  border: `1px solid ${incomingOffer.fromTeam.primaryColor}60`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 9, fontWeight: 900, color: incomingOffer.fromTeam.primaryColor,
+                }}>{incomingOffer.fromTeam.abbreviation}</div>
+                <div>
+                  <div style={{ fontSize: 9, color: incomingOffer.fromTeam.primaryColor, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                    📞 Incoming Trade Offer
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, marginTop: 1 }}>
+                    {incomingOffer.fromTeam.city} {incomingOffer.fromTeam.name}
+                  </div>
+                </div>
+                <button onClick={handleDeclineIncoming}
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.txtMuted, cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 2 }}>×</button>
+              </div>
+
+              <p style={{ fontSize: 11, color: C.txtSub, lineHeight: 1.55, marginBottom: 12 }}>
+                {incomingOffer.narrative}
+              </p>
+
+              {/* Trade breakdown */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                <div style={{ background: `${C.red}10`, border: `1px solid ${C.red}30`, borderRadius: 8, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 8, color: C.red, fontWeight: 900, letterSpacing: '0.1em', marginBottom: 5 }}>YOU SEND</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: C.txt }}>{getPickLabel(incomingOffer.wantsPick)}</div>
+                  <div style={{ fontSize: 9, color: C.txtMuted, marginTop: 2 }}>{incomingOffer.wantsValue} pts</div>
+                </div>
+                <div style={{ background: `${C.green}10`, border: `1px solid ${C.green}30`, borderRadius: 8, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 8, color: C.green, fontWeight: 900, letterSpacing: '0.1em', marginBottom: 5 }}>YOU RECEIVE</div>
+                  {incomingOffer.offersPicks.map(p => (
+                    <div key={p} style={{ fontSize: 11, fontWeight: 800, color: C.txt }}>{getPickLabelShort(p)}</div>
+                  ))}
+                  <div style={{ fontSize: 9, color: C.txtMuted, marginTop: 2 }}>{Math.round(incomingOffer.offersValue)} pts</div>
+                </div>
+              </div>
+
+              {/* Value delta */}
+              {(() => {
+                const surplus = incomingOffer.offersValue - incomingOffer.wantsValue;
+                const pct = Math.round((surplus / incomingOffer.wantsValue) * 100);
+                const isGood = surplus >= 0;
+                return (
+                  <div style={{ fontSize: 10, color: isGood ? C.green : C.amber, fontWeight: 700, marginBottom: 12 }}>
+                    {isGood ? `✓ You gain ${pct}% value (${Math.round(surplus)} pts)` : `⚠ You lose ${Math.abs(pct)}% value (${Math.abs(Math.round(surplus))} pts)`}
+                  </div>
+                );
+              })()}
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handleAcceptIncoming}
+                  style={{
+                    flex: 1, background: `linear-gradient(135deg, ${C.green}, #16a34a)`,
+                    border: 'none', color: '#fff', borderRadius: 9, padding: '10px',
+                    fontSize: 12, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em',
+                    boxShadow: `0 0 16px -4px ${C.green}80`,
+                  }}>ACCEPT DEAL</button>
+                <button onClick={handleDeclineIncoming}
+                  style={{
+                    flex: 1, background: C.elevated, border: `1px solid ${C.border}`,
+                    color: C.txtSub, borderRadius: 9, padding: '10px',
+                    fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                  }}>DECLINE</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 9, color: C.txtMuted, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 4 }}>Trade Desk</div>
         <div style={{ fontSize: 13, color: selectedTeam ? C.txt : C.txtSub, fontWeight: 600 }}>
@@ -644,6 +883,10 @@ export function PreDraftPage() {
             <button key={tab} onClick={() => setMobileTab(tab)}
               style={{ flex: 1, padding: '11px 4px', background: 'none', border: 'none', borderBottom: `2px solid ${mobileTab === tab ? C.blueBright : 'transparent'}`, color: mobileTab === tab ? C.blueBright : C.txtMuted, fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', cursor: 'pointer', transition: 'color 160ms' }}>
               {label}
+              {tab === 'trade' && incomingOffer && (
+                <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 0.9 }}
+                  style={{ marginLeft: 4, fontSize: 8, background: incomingOffer.fromTeam.primaryColor, color: '#fff', borderRadius: 999, padding: '1px 6px', fontWeight: 900, display: 'inline-block' }}>!</motion.span>
+              )}
               {tab === 'feed' && activityFeed.length > 0 && (
                 <span style={{ marginLeft: 4, fontSize: 8, background: C.green, color: '#000', borderRadius: 999, padding: '1px 5px', fontWeight: 900 }}>{Math.min(activityFeed.length, 99)}</span>
               )}

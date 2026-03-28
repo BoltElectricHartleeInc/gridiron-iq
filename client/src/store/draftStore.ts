@@ -618,8 +618,29 @@ export const useDraftStore = create<DraftStore>()(
         const currentPick = session.picks[currentPickIndex];
         if (!currentPick?.isUserPick) return;
 
+        // Pick-position-aware trade probability based on real NFL draft trade data:
+        // R1 picks 1-5: ~12% (too expensive/risky to trade, teams rarely give up top-5)
+        // R1 picks 6-15: ~55% (hottest window — teams chase QBs, premier WRs, edge rushers)
+        // R1 picks 16-32: ~40% (active, mid-round maneuvering)
+        // R2: ~35% (2024 had 7 R2 trades out of 32 picks = ~22%, but bumped for fun)
+        // R3: ~25% (2024 had 4 R3 trades)
+        // R4: ~18%
+        // R5-7: ~10%
+        const overall = currentPick.overall;
+        const round = Math.ceil(overall / 32);
+        let pickTradeProb: number;
+        if (overall <= 5) pickTradeProb = 0.12;
+        else if (overall <= 15) pickTradeProb = 0.55;
+        else if (overall <= 32) pickTradeProb = 0.40;
+        else if (round === 2) pickTradeProb = 0.35;
+        else if (round === 3) pickTradeProb = 0.25;
+        else if (round === 4) pickTradeProb = 0.18;
+        else pickTradeProb = 0.10;
+
+        // Blend with the user's tradeFrequency setting (0-100 slider)
         const { tradeFrequency } = get();
-        if (Math.random() > tradeFrequency / 100) return;
+        const settingMult = (tradeFrequency / 100) * 1.4; // scale: 35 default → ~0.49x multiplier
+        if (Math.random() > pickTradeProb * settingMult) return;
 
         // Find teams picking after the user (1-8 picks away) that need a position
         const userPickValue = getPickValue(currentPick.overall);

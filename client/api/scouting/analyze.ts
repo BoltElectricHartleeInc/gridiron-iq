@@ -22,12 +22,16 @@ Overall Grade: ${grade}/100
 Traits: ${Array.isArray(traits) ? traits.join(', ') : (traits ?? '—')}
 Summary: ${description ?? '—'}
 
-Write a 3-paragraph scouting report covering:
+Your response MUST start with exactly these two lines (no intro, no preamble):
+STRENGTHS: [3 specific strengths, comma-separated, each 2-5 words, football-specific]
+CONCERNS: [2 specific concerns, comma-separated, each 2-5 words, football-specific]
+
+Then a blank line, then write a 3-paragraph scouting report covering:
 1. What makes this player special and their impact at the next level
 2. The team fit / scheme fit analysis
 3. Draft recommendation (which round, which team type benefits most)
 
-Be specific, use football terminology, and write like a real scout would. Keep it tight.`;
+Be specific, use football terminology, write like a real scout. Keep it tight.`;
 
   try {
     const upstream = await (globalThis as any).fetch('https://api.anthropic.com/v1/messages', {

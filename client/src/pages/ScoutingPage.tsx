@@ -153,8 +153,14 @@ export function ScoutingPage() {
   }
 
   const currentClass = classes[selectedYear] ?? [];
+  // EDGE and DE are the same position — data uses both labels
+  const positionMatches = (pos: string, filter: string): boolean => {
+    if (filter === 'ALL') return true;
+    if (filter === 'EDGE') return pos === 'EDGE' || pos === 'DE' || pos === 'OLB';
+    return pos === filter;
+  };
   const filtered = currentClass
-    .filter(p => posFilter === 'ALL' || p.position === posFilter)
+    .filter(p => positionMatches(p.position, posFilter))
     .filter(p => roundFilter === 'All' || (roundFilter === 'R1' && p.round === 1) || (roundFilter === 'R2' && p.round === 2) || (roundFilter === 'R3+' && p.round >= 3))
     .filter(p => !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.college.toLowerCase().includes(searchQuery.toLowerCase()));
 

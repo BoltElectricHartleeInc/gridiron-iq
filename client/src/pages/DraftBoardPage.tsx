@@ -462,6 +462,8 @@ function DraftBoardLayout({
   const filteredProspects = useMemo(() => {
     const sorted = remainingProspects.slice().sort((a, b) => a.rank - b.rank);
     if (activePosition === 'ALL') return sorted;
+    // EDGE and DE are the same position — data uses both labels
+    if (activePosition === 'EDGE') return sorted.filter(p => p.position === 'EDGE' || p.position === 'DE' || p.position === 'OLB');
     return sorted.filter((prospect) => prospect.position === activePosition);
   }, [remainingProspects, activePosition]);
 

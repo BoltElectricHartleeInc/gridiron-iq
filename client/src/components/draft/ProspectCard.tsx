@@ -105,10 +105,14 @@ export function ProspectCard({ prospect }: Props) {
   const [scoutReport, setScoutReport] = useState<string>('');
   const [scoutLoading, setScoutLoading] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
+  const [parsedStrengths, setParsedStrengths] = useState<string[]>([]);
+  const [parsedConcerns, setParsedConcerns] = useState<string[]>([]);
 
   const fetchScoutReport = async () => {
     setScoutLoading(true);
     setScoutReport('');
+    setParsedStrengths([]);
+    setParsedConcerns([]);
 
     try {
       const res = await fetch(API_BASE + '/api/scouting/analyze', {
@@ -125,7 +129,6 @@ export function ProspectCard({ prospect }: Props) {
       });
 
       if (!res.ok || !res.body) {
-        // Fallback: generate locally
         setScoutReport(generateLocalScoutReport(prospect));
         setScoutLoading(false);
         return;
@@ -140,10 +143,37 @@ export function ProspectCard({ prospect }: Props) {
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         full += chunk;
-        setScoutReport(full);
+
+        // Parse STRENGTHS / CONCERNS header lines once they're fully received
+        const lines = full.split('\n');
+        let strengthsFound = false;
+        let concernsFound = false;
+        const bodyLines: string[] = [];
+
+        for (const line of lines) {
+          if (line.startsWith('STRENGTHS:')) {
+            const raw = line.replace('STRENGTHS:', '').trim();
+            if (raw) {
+              setParsedStrengths(raw.split(',').map(s => s.trim()).filter(Boolean));
+              strengthsFound = true;
+            }
+          } else if (line.startsWith('CONCERNS:')) {
+            const raw = line.replace('CONCERNS:', '').trim();
+            if (raw) {
+              setParsedConcerns(raw.split(',').map(s => s.trim()).filter(Boolean));
+              concernsFound = true;
+            }
+          } else {
+            bodyLines.push(line);
+          }
+        }
+        // If we haven't found the header lines yet, show everything
+        const displayText = (strengthsFound || concernsFound)
+          ? bodyLines.join('\n').replace(/^\n+/, '')
+          : full;
+        setScoutReport(displayText);
       }
     } catch {
-      // Fallback: generate locally so the user always gets a report
       setScoutReport(generateLocalScoutReport(prospect));
     } finally {
       setScoutLoading(false);
@@ -206,15 +236,27 @@ export function ProspectCard({ prospect }: Props) {
       <div className="grid grid-cols-2 gap-2">
         <div>
           <div className="text-xs font-semibold text-green-400/70 mb-1">Strengths</div>
-          {(prospect.strengths.length > 0 ? prospect.strengths : getDefaultStrengths(prospect.position)).slice(0, 3).map(s => (
-            <div key={s} className="text-xs text-white/40">+ {s}</div>
-          ))}
+          {parsedStrengths.length > 0 ? (
+            parsedStrengths.slice(0, 3).map(s => (
+              <div key={s} className="text-xs text-white/40">+ {s}</div>
+            ))
+          ) : scoutReport || scoutLoading ? (
+            <div className="text-xs text-white/20 italic">Analyzing…</div>
+          ) : (
+            <div className="text-xs text-white/20 italic">Scout to analyze</div>
+          )}
         </div>
         <div>
-          <div className="text-xs font-semibold text-red-400/70 mb-1">Weaknesses</div>
-          {(prospect.weaknesses.length > 0 ? prospect.weaknesses : getDefaultWeaknesses(prospect.position)).slice(0, 2).map(w => (
-            <div key={w} className="text-xs text-white/40">− {w}</div>
-          ))}
+          <div className="text-xs font-semibold text-red-400/70 mb-1">Concerns</div>
+          {parsedConcerns.length > 0 ? (
+            parsedConcerns.slice(0, 2).map(w => (
+              <div key={w} className="text-xs text-white/40">− {w}</div>
+            ))
+          ) : scoutReport || scoutLoading ? (
+            <div className="text-xs text-white/20 italic">Analyzing…</div>
+          ) : (
+            <div className="text-xs text-white/20 italic">Scout to analyze</div>
+          )}
         </div>
       </div>
 

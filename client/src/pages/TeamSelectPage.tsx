@@ -462,7 +462,7 @@ function TeamSelectPageInner({ draftStore, onStart }: TeamSelectPageProps) {
       <AppShell title="Team Select" backTo="/" backLabel="Home" maxWidth={1400}>
         {isMobile ? (
           /* ── MOBILE LAYOUT ── */
-          <div style={{ paddingBottom: 100 }}>
+          <div style={{ paddingBottom: 'calc(140px + env(safe-area-inset-bottom, 0px))' }}>
             {/* Header */}
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, color: C.gold, letterSpacing: 3, fontWeight: 700, marginBottom: 4 }}>
@@ -492,8 +492,17 @@ function TeamSelectPageInner({ draftStore, onStart }: TeamSelectPageProps) {
               </div>
             )}
 
-            {/* Sticky CTA at bottom */}
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, padding: '12px 16px', background: 'rgba(8,10,18,0.95)', backdropFilter: 'blur(12px)', borderTop: `1px solid ${C.border}` }}>
+            {/* Sticky CTA at bottom — sits above the 60px bottom tab bar */}
+            <div style={{
+              position: 'fixed',
+              bottom: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+              left: 0, right: 0,
+              zIndex: 150,
+              padding: '12px 16px',
+              background: 'rgba(8,10,18,0.97)',
+              backdropFilter: 'blur(12px)',
+              borderTop: `1px solid ${C.border}`,
+            }}>
               {ctaButton}
             </div>
           </div>
