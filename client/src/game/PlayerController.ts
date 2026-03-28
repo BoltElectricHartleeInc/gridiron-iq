@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { virtualInput } from './VirtualInput';
 
 export interface ControlledPlayer extends Phaser.GameObjects.Container {
   speedRating: number;
@@ -54,12 +55,19 @@ export class PlayerController {
     const scale = delta / 16.67;
     let dx = 0, dy = 0;
 
+    // Keyboard
     if (this.cursors.right?.isDown) dx = 1;
     else if (this.cursors.left?.isDown) dx = -0.55;
     if (this.cursors.up?.isDown) dy = -1;
     else if (this.cursors.down?.isDown) dy = 1;
 
-    const sprint = this.shiftKey.isDown && this.player.stamina > 0;
+    // Virtual (on-screen controller) — overrides keyboard if stick is active
+    if (Math.abs(virtualInput.dx) > 0.05 || Math.abs(virtualInput.dy) > 0.05) {
+      dx = virtualInput.dx;
+      dy = virtualInput.dy;
+    }
+
+    const sprint = (this.shiftKey.isDown || virtualInput.sprint) && this.player.stamina > 0;
     const sprintMult = sprint ? 1.52 : 1;
     if (sprint) this.player.stamina = Math.max(0, this.player.stamina - 0.28);
 
@@ -82,10 +90,10 @@ export class PlayerController {
       this.player.velY *= 0.78;
     }
 
-    // Special moves
-    if (Phaser.Input.Keyboard.JustDown(this.zKey)) this.doJuke();
-    if (Phaser.Input.Keyboard.JustDown(this.xKey)) this.doSpin();
-    if (Phaser.Input.Keyboard.JustDown(this.cKey)) this.doStiffArm();
+    // Special moves — keyboard or virtual controller
+    if (Phaser.Input.Keyboard.JustDown(this.zKey) || virtualInput.consumeJuke())     this.doJuke();
+    if (Phaser.Input.Keyboard.JustDown(this.xKey) || virtualInput.consumeSpin())     this.doSpin();
+    if (Phaser.Input.Keyboard.JustDown(this.cKey) || virtualInput.consumeStiffArm()) this.doStiffArm();
   }
 
   private doJuke(): void {

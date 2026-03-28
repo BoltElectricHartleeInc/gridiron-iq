@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { virtualInput } from './VirtualInput';
 import { NFL_PLAYBOOK, type PlayDef } from "./Playbook";
 import { BallPhysics } from "./BallPhysics";
 import { StatsTracker } from "./StatsTracker";
@@ -86,6 +87,7 @@ export default class FootballGame extends Phaser.Scene {
   private preSnapRemaining = PRE_SNAP_SECONDS;
   private lastStatsEmitAt = 0;
   private whistleTimer = 0;
+  private lastEmittedPhase = '';
 
   // Special teams state
   private fgPowerMeter = 0;
@@ -265,6 +267,8 @@ export default class FootballGame extends Phaser.Scene {
 
     // Debug overlay
     this.updateCarrierIndicator();
+    this.emitPhaseIfChanged();
+    this.pollVirtualInput();
     if (this.debugVisible) this.updateDebugOverlay();
   }
 
@@ -1348,6 +1352,46 @@ export default class FootballGame extends Phaser.Scene {
     if (n.dx > 140 && Math.abs(n.dy) < 20) return 0xfacc15;
     if (n.dx > 70 && Math.abs(n.dy) < 10) return 0xffffff;
     return 0xa855f7;
+  }
+
+  // ── Virtual input bridge ───────────────────────────────────────────────────
+
+  private emitPhaseIfChanged(): void {
+    const key = `${this.phase}|${this.down}|${this.yardLine}`;
+    if (key === this.lastEmittedPhase) return;
+    this.lastEmittedPhase = key;
+    window.dispatchEvent(new CustomEvent('gridiron:phase', {
+      detail: { phase: this.phase, down: this.down, distance: this.distance, yardLine: this.yardLine },
+    }));
+  }
+
+  private pollVirtualInput(): void {
+    if (virtualInput.consumeSnap()) {
+      if (this.phase === PlayPhase.PRE_SNAP) this.snapBall();
+      if (this.phase === PlayPhase.FG_ATTEMPT) this.lockFgPower();
+    }
+    if (virtualInput.consumeThrow(0)) this.attemptThrow(1);
+    if (virtualInput.consumeThrow(1)) this.attemptThrow(2);
+    if (virtualInput.consumeThrow(2)) this.attemptThrow(3);
+    if (virtualInput.consumeThrow(3)) this.attemptThrow(4);
+    if (virtualInput.consumeThrowAway()) {
+      if (this.phase === PlayPhase.LIVE_PLAY && this.activePlay && !this.activePlay.isRun) {
+        this.endPassIncomplete('Throw Away');
+      }
+    }
+    if (virtualInput.consumePunt()) {
+      if (this.phase === PlayPhase.FORMATION && this.down === 4) this.startPunt();
+    }
+    if (virtualInput.consumeFG()) {
+      if (this.phase === PlayPhase.FORMATION && this.down === 4) this.startFgAttempt();
+    }
+    if (virtualInput.consumeFairCatch()) {
+      if (this.phase === PlayPhase.KICKOFF_RET || this.phase === PlayPhase.PUNT) {
+        this.showMiniBanner('FAIR CATCH');
+        this.yardLine = Phaser.Math.Clamp(this.carrier.x / 5.6, 1, 40);
+        this.endPlay('Fair Catch', 'normal');
+      }
+    }
   }
 
   // ── Debug overlay ─────────────────────────────────────────────────────────

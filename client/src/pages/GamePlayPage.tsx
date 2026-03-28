@@ -1,5 +1,6 @@
 import { API_BASE } from '../lib/api';
 import { useEffect, useRef, useState } from 'react';
+import { GameController } from '../components/game/GameController';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { NFL_GAME_TEAMS, NCAA_GAME_TEAMS } from '../game/teams';
 import type { GameOverData } from '../game/FootballGame';
@@ -95,12 +96,11 @@ export function GamePlayPage() {
         </div>
       </div>
 
-      {/* Phaser canvas container */}
-      <div
-        ref={containerRef}
-        className="flex-1 w-full"
-        style={{ minHeight: 0 }}
-      />
+      {/* Phaser canvas + controller overlay */}
+      <div className="flex-1 w-full relative" style={{ minHeight: 0 }}>
+        <div ref={containerRef} className="absolute inset-0" />
+        <GameController />
+      </div>
 
       {/* React Game Over Overlay */}
       {gameOver && (
