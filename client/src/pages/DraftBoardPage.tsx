@@ -844,7 +844,7 @@ function DraftBoardLayout({
 // ─── Store-connected page (used by App router with no props) ─────────────────
 export function DraftBoardPage() {
   const navigate = useNavigate();
-  const { session, availableProspects, simulateNextPick, simulateToUserPick } = useDraftStore();
+  const { session, availableProspects, simulateNextPick, simulateToUserPick, makePick } = useDraftStore();
 
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState<SimulationSpeed>('NORMAL');
@@ -939,6 +939,51 @@ export function DraftBoardPage() {
     ? (session.picks[session.currentPickIndex]?.isUserPick ?? false)
     : false;
 
+  const renderProspectCard = useCallback((prospect: BigBoardProspect, close: () => void) => {
+    const posPalette = POS[prospect.position] ?? { bg: T.blueSub, border: T.borderFoc, text: T.blueBright, pill: T.panel };
+    return (
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(4,9,17,0.8)', display: 'grid', placeItems: 'center', padding: 20 }}
+        onClick={close}
+      >
+        <div onClick={e => e.stopPropagation()} style={{ width: 'min(480px,100%)', background: T.surface, border: `1px solid ${T.borderHi}`, borderRadius: 16, overflow: 'hidden' }}>
+          {/* Header */}
+          <div style={{ padding: '20px 20px 16px', borderBottom: `1px solid ${T.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 10, color: T.txtMuted, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase' }}>Prospect Card</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: T.txt, marginTop: 4, letterSpacing: '-.01em' }}>{prospect.fullName}</div>
+                <div style={{ fontSize: 13, color: T.txtSub, marginTop: 2 }}>{prospect.school}</div>
+              </div>
+              <div style={{ fontSize: 36, fontWeight: 900, color: gradeColor(prospect.grade), lineHeight: 1 }}>{gradeLetter(prospect.grade)}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 999, border: `1px solid ${posPalette.border}`, background: posPalette.bg, color: posPalette.text, padding: '4px 10px' }}>{prospect.position}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: T.txtSub, padding: '4px 0' }}>Rank #{prospect.rank} · Grade {prospect.grade}</span>
+            </div>
+          </div>
+          {/* Actions */}
+          <div style={{ padding: 16, display: 'flex', gap: 10 }}>
+            {isUserTurn && (
+              <button
+                onClick={() => { makePick(String(prospect.id)); close(); }}
+                style={{ flex: 1, background: `linear-gradient(135deg, #1565C0, #2196F3)`, border: 'none', borderRadius: 10, color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 800, padding: '14px 0', cursor: 'pointer', letterSpacing: '.04em' }}
+              >
+                DRAFT {prospect.fullName.split(' ').pop()?.toUpperCase()} →
+              </button>
+            )}
+            <button
+              onClick={close}
+              style={{ padding: '14px 20px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 10, color: T.txtSub, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }, [isUserTurn, makePick]);
+
   return (
     <DraftBoardLayout
       userTeam={userTeam}
@@ -951,6 +996,7 @@ export function DraftBoardPage() {
       onPauseToggle={() => setPaused(p => !p)}
       onSpeedChange={setSpeed}
       onSkipToMyPick={() => { setPaused(false); simulateToUserPick(); }}
+      renderProspectCard={renderProspectCard}
     />
   );
 }
