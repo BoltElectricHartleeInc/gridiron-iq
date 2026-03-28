@@ -478,38 +478,53 @@ export const useDraftStore = create<DraftStore>()(
         const { needsWeight, positionWeight, draftCraziness } = state;
         let lastCommentary = '';
 
-        while (
-          session.status === 'drafting' &&
-          session.currentPickIndex < session.picks.length &&
-          !session.picks[session.currentPickIndex].isUserPick
-        ) {
-          const pick = session.picks[session.currentPickIndex];
-          const team = NFL_TEAMS.find(t => t.id === pick.teamId);
-          if (!team) break;
+        // Batch all AI picks in one synchronous pass — but chunk via
+        // setTimeout(0) every 20 picks so the mobile UI can breathe
+        const CHUNK = 20;
+        let iterations = 0;
 
-          const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight, draftCraziness, pick.overall);
-          const updatedPicks = [...session.picks];
-          updatedPicks[session.currentPickIndex] = { ...pick, prospect: aiPick };
+        const runChunk = () => {
+          while (
+            session.status === 'drafting' &&
+            session.currentPickIndex < session.picks.length &&
+            !session.picks[session.currentPickIndex].isUserPick
+          ) {
+            const pick = session.picks[session.currentPickIndex];
+            const team = NFL_TEAMS.find(t => t.id === pick.teamId);
+            if (!team) break;
 
-          const completedPick = { ...pick, prospect: aiPick };
-          lastCommentary = generateCommentary(completedPick, false);
+            const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight, draftCraziness, pick.overall);
+            const updatedPicks = [...session.picks];
+            updatedPicks[session.currentPickIndex] = { ...pick, prospect: aiPick };
+            lastCommentary = generateCommentary({ ...pick, prospect: aiPick }, false);
+            availableProspects = availableProspects.filter(p => p.id !== aiPick.id);
+            const nextIndex = session.currentPickIndex + 1;
+            session = {
+              ...session,
+              picks: updatedPicks,
+              currentPickIndex: nextIndex,
+              status: nextIndex >= session.picks.length ? 'complete' : 'drafting',
+            };
 
-          availableProspects = availableProspects.filter(p => p.id !== aiPick.id);
-          const nextIndex = session.currentPickIndex + 1;
-          session = {
-            ...session,
-            picks: updatedPicks,
-            currentPickIndex: nextIndex,
-            status: nextIndex >= session.picks.length ? 'complete' : 'drafting',
-          };
-        }
+            iterations++;
+            if (iterations % CHUNK === 0) {
+              // Flush intermediate state so React can re-render + UI stays alive
+              set({ session, availableProspects });
+              setTimeout(runChunk, 0);
+              return;
+            }
+          }
 
-        set({
-          session,
-          availableProspects,
-          commentary: lastCommentary || null,
-          commentaryType: lastCommentary ? 'ai' : null,
-        });
+          // Done — final commit
+          set({
+            session,
+            availableProspects,
+            commentary: lastCommentary || null,
+            commentaryType: lastCommentary ? 'ai' : null,
+          });
+        };
+
+        runChunk();
       },
 
       proposeTrade: (_pkg: TradePackage) => {

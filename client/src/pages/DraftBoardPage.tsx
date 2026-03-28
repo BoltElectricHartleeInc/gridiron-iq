@@ -703,11 +703,11 @@ function DraftBoardLayout({
               </div>
           )}
 
-        {/* Fixed bottom action bar */}
+        {/* Fixed bottom action bar — z-index above trade offer overlay (z-30) */}
         <div style={{
           flexShrink: 0, background: T.surface, borderTop: `1px solid ${T.border}`,
           padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))',
-          display: 'flex', gap: 8, alignItems: 'center',
+          display: 'flex', gap: 8, alignItems: 'center', position: 'relative', zIndex: 50,
         }}>
           <button onClick={onPauseToggle} style={{
             padding: '10px 14px', background: paused ? T.blueSub : T.panel,
