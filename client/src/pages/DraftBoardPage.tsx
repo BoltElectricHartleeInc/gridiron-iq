@@ -7,6 +7,8 @@ import { NFL_TEAMS } from '../data/teams';
 import { IncomingTradeOffer } from '../components/draft/IncomingTradeOffer';
 import DraftBoard from '../components/draft/DraftBoard';
 import { POS, T, gradeColor, gradeLetter, teamLogoUrl } from '../styles/tokens';
+import { API_BASE } from '../lib/api';
+import type { Prospect } from '../types/draft';
 
 type SimulationSpeed = 'FAST' | 'NORMAL' | 'SLOW';
 type ValueTag = 'STEAL' | 'REACH' | 'VALUE';
@@ -125,6 +127,214 @@ function resolveValueTag(prospect: BigBoardProspect): ValueTag {
   if (prospect.grade >= 88) return 'STEAL';
   if (prospect.grade <= 72) return 'REACH';
   return 'VALUE';
+}
+
+function getRoundClockSeconds(round: number): number {
+  if (round === 1) return 600; // 10 min
+  if (round === 2) return 420; // 7 min
+  return 300;                  // 5 min rounds 3-7
+}
+
+function formatClock(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function clockColor(seconds: number, maxSeconds: number): string {
+  const pct = seconds / maxSeconds;
+  if (pct > 0.5) return '#00C853';   // green
+  if (pct > 0.2) return '#FF8F00';   // amber
+  return '#F44336';                   // red
+}
+
+type ProspectCardProps = {
+  prospect: BigBoardProspect;
+  fullProspect?: Prospect;
+  isUserTurn: boolean;
+  onDraft: () => void;
+  onClose: () => void;
+};
+
+function ProspectCard({ prospect, fullProspect, isUserTurn, onDraft, onClose }: ProspectCardProps) {
+  const [tab, setTab] = useState<'card' | 'report'>('card');
+  const [reportText, setReportText] = useState('');
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
+  const posPalette = POS[prospect.position] ?? { bg: T.blueSub, border: T.borderFoc, text: T.blueBright, pill: T.panel };
+
+  const fetchReport = async () => {
+    if (reportText || reportLoading) return;
+    setReportLoading(true);
+    setReportError('');
+    try {
+      const body = fullProspect
+        ? { ...fullProspect }
+        : { name: prospect.fullName, position: prospect.position, college: prospect.school, grade: prospect.grade, traits: [], description: '', strengths: [], weaknesses: [] };
+      const res = await fetch(`${API_BASE}/api/scouting/deep-dive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok || !res.body) throw new Error('Request failed');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      while (!done) {
+        const chunk = await reader.read();
+        done = chunk.done;
+        if (chunk.value) setReportText(prev => prev + decoder.decode(chunk.value));
+      }
+    } catch {
+      setReportError('Failed to load. Check server connection.');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'report') fetchReport();
+  }, [tab]);
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(4,9,17,0.82)', display: 'grid', placeItems: 'center', padding: 20 }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ width: 'min(560px,100%)', background: T.surface, border: `1px solid ${T.borderHi}`, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}
+      >
+        {/* Header */}
+        <div style={{ padding: '18px 20px 14px', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: T.txt, letterSpacing: '-.01em' }}>{prospect.fullName}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 999, border: `1px solid ${posPalette.border}`, background: posPalette.bg, color: posPalette.text, padding: '3px 9px' }}>
+                  {prospect.position}
+                </span>
+                <span style={{ fontSize: 12, color: T.txtSub }}>{prospect.school}</span>
+                <span style={{ fontSize: 11, color: T.txtMuted }}>#{prospect.rank}</span>
+                {fullProspect?.comparableTo && (
+                  <span style={{ fontSize: 10, color: T.gold, fontWeight: 700 }}>comp: {fullProspect.comparableTo}</span>
+                )}
+              </div>
+            </div>
+            <div style={{ fontSize: 52, fontWeight: 900, color: gradeColor(prospect.grade), lineHeight: 1, letterSpacing: '-.02em' }}>
+              {gradeLetter(prospect.grade)}
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+          {(['card', 'report'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                flex: 1, padding: '10px 0', background: 'none', border: 'none',
+                borderBottom: tab === t ? `2px solid ${T.blueBright}` : '2px solid transparent',
+                color: tab === t ? T.blueBright : T.txtSub,
+                fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase',
+                cursor: 'pointer', fontFamily: 'inherit', transition: 'color 120ms',
+              }}
+            >
+              {t === 'card' ? 'CARD' : '⚡ SCOUT REPORT'}
+            </button>
+          ))}
+        </div>
+
+        {/* Card tab */}
+        {tab === 'card' && (
+          <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
+            {fullProspect ? (
+              <>
+                {/* Measurables */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
+                  {[
+                    { label: 'Height', val: fullProspect.height },
+                    { label: 'Weight', val: `${fullProspect.weight} lbs` },
+                    { label: '40-Yard', val: fullProspect.fortyTime ? `${fullProspect.fortyTime}s` : '—' },
+                    { label: 'Round', val: `Round ${fullProspect.round}` },
+                    { label: 'Trend', val: fullProspect.draftStockTrend ?? 'steady' },
+                    { label: 'Grade', val: String(fullProspect.grade) },
+                  ].map(({ label, val }) => (
+                    <div key={label} style={{ background: T.panel, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px' }}>
+                      <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '.12em', marginBottom: 3 }}>{label.toUpperCase()}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: T.txt }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Traits */}
+                {fullProspect.traits.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '.12em', marginBottom: 6 }}>KEY TRAITS</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {fullProspect.traits.map(tr => (
+                        <span key={tr} style={{ fontSize: 10, fontWeight: 700, borderRadius: 999, background: T.elevated, border: `1px solid ${T.borderHi}`, color: T.txtSub, padding: '3px 9px' }}>{tr}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Strengths / Weaknesses */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: T.green, fontWeight: 800, letterSpacing: '.12em', marginBottom: 6 }}>STRENGTHS</div>
+                    {fullProspect.strengths.map(s => <div key={s} style={{ fontSize: 11, color: T.txtSub, marginBottom: 3 }}>✓ {s}</div>)}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: T.red, fontWeight: 800, letterSpacing: '.12em', marginBottom: 6 }}>CONCERNS</div>
+                    {fullProspect.weaknesses.map(w => <div key={w} style={{ fontSize: 11, color: T.txtSub, marginBottom: 3 }}>⚠ {w}</div>)}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ color: T.txtSub, fontSize: 12, padding: '16px 0' }}>No extended data available for this prospect.</div>
+            )}
+          </div>
+        )}
+
+        {/* Scout report tab */}
+        {tab === 'report' && (
+          <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
+            {reportLoading && !reportText && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: T.txtSub, fontSize: 12 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.blueBright, animation: 'commandPulse 1s ease-in-out infinite', display: 'inline-block' }} />
+                Generating scouting report...
+              </div>
+            )}
+            {reportError && <div style={{ color: T.red, fontSize: 12 }}>{reportError}</div>}
+            {reportText && (
+              <div style={{ fontSize: 12, color: T.txtSub, lineHeight: 1.75, whiteSpace: 'pre-wrap', fontFamily: T.fontBase }}>
+                {reportText}
+                {reportLoading && <span style={{ opacity: 0.5, animation: 'commandPulse 0.8s ease-in-out infinite', display: 'inline-block', marginLeft: 2 }}>▋</span>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ padding: '12px 16px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 10, flexShrink: 0 }}>
+          {isUserTurn && (
+            <button
+              onClick={onDraft}
+              style={{ flex: 1, background: `linear-gradient(135deg, #1565C0, #2196F3)`, border: 'none', borderRadius: 10, color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 800, padding: '13px 0', cursor: 'pointer', letterSpacing: '.04em' }}
+            >
+              DRAFT {prospect.fullName.split(' ').pop()?.toUpperCase()} →
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            style={{ padding: '13px 20px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 10, color: T.txtSub, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function defaultProspectCard(prospect: BigBoardProspect, close: () => void): ReactNode {
@@ -395,6 +605,12 @@ function DraftBoardLayout({
               />
             )}
           </div>
+          {pickClock && (
+            <>
+              <span style={{ color: T.border, fontSize: 14, marginLeft: 4 }}>|</span>
+              {pickClock}
+            </>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minWidth: 0 }}>
@@ -944,49 +1160,48 @@ export function DraftBoardPage() {
     }
   }, [session?.currentPickIndex]);
 
+  // ── NFL pick clock ────────────────────────────────────────────────────────
+  const [clockSeconds, setClockSeconds] = useState(600);
+  const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clockMaxRef = useRef(600);
+
+  // Reset clock when the pick changes
+  useEffect(() => {
+    const currentPick = session?.picks[session.currentPickIndex];
+    const round = currentPick?.round ?? 1;
+    const maxSec = getRoundClockSeconds(round);
+    clockMaxRef.current = maxSec;
+    setClockSeconds(maxSec);
+
+    if (clockRef.current) clearInterval(clockRef.current);
+    if (!session || session.status !== 'drafting') return;
+
+    clockRef.current = setInterval(() => {
+      setClockSeconds(prev => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => { if (clockRef.current) clearInterval(clockRef.current); };
+  }, [session?.currentPickIndex, session?.status]);
+
+  // Auto-pick when clock expires on user's turn
+  useEffect(() => {
+    if (clockSeconds === 0 && isUserTurn && availableProspects.length > 0) {
+      makePick(availableProspects[0].id);
+    }
+  }, [clockSeconds]);
+
   const renderProspectCard = useCallback((prospect: BigBoardProspect, close: () => void) => {
-    const posPalette = POS[prospect.position] ?? { bg: T.blueSub, border: T.borderFoc, text: T.blueBright, pill: T.panel };
+    const fullProspect = availableProspects.find(p => p.id === String(prospect.id));
     return (
-      <div
-        style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(4,9,17,0.8)', display: 'grid', placeItems: 'center', padding: 20 }}
-        onClick={close}
-      >
-        <div onClick={e => e.stopPropagation()} style={{ width: 'min(480px,100%)', background: T.surface, border: `1px solid ${T.borderHi}`, borderRadius: 16, overflow: 'hidden' }}>
-          {/* Header */}
-          <div style={{ padding: '20px 20px 16px', borderBottom: `1px solid ${T.border}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: T.txt, letterSpacing: '-.01em' }}>{prospect.fullName}</div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 999, border: `1px solid ${posPalette.border}`, background: posPalette.bg, color: posPalette.text, padding: '4px 10px' }}>{prospect.position}</span>
-                  <span style={{ fontSize: 12, color: T.txtSub, fontWeight: 600 }}>{prospect.school}</span>
-                  <span style={{ fontSize: 12, color: T.txtMuted, fontWeight: 600 }}>#{prospect.rank}</span>
-                </div>
-              </div>
-              <div style={{ fontSize: 48, fontWeight: 900, color: gradeColor(prospect.grade), lineHeight: 1, letterSpacing: '-.02em' }}>{gradeLetter(prospect.grade)}</div>
-            </div>
-          </div>
-          {/* Actions */}
-          <div style={{ padding: 16, display: 'flex', gap: 10 }}>
-            {isUserTurn && (
-              <button
-                onClick={() => { makePick(String(prospect.id)); close(); }}
-                style={{ flex: 1, background: `linear-gradient(135deg, #1565C0, #2196F3)`, border: 'none', borderRadius: 10, color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 800, padding: '14px 0', cursor: 'pointer', letterSpacing: '.04em' }}
-              >
-                DRAFT {prospect.fullName.split(' ').pop()?.toUpperCase()} →
-              </button>
-            )}
-            <button
-              onClick={close}
-              style={{ padding: '14px 20px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 10, color: T.txtSub, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
+      <ProspectCard
+        prospect={prospect}
+        fullProspect={fullProspect}
+        isUserTurn={isUserTurn}
+        onDraft={() => { makePick(String(prospect.id)); close(); }}
+        onClose={close}
+      />
     );
-  }, [isUserTurn, makePick]);
+  }, [isUserTurn, makePick, availableProspects]);
 
   // ── User's raw store picks (needed by IncomingTradeOffer for counter logic) ─
   const userStorePicks = session?.picks.filter(p => p.isUserPick) ?? [];
@@ -1004,6 +1219,28 @@ export function DraftBoardPage() {
     </AnimatePresence>
   ) : null;
 
+  const currentRoundForClock = session?.picks[session.currentPickIndex]?.round ?? 1;
+  const clockMax = getRoundClockSeconds(currentRoundForClock);
+  const clockCol = clockColor(clockSeconds, clockMax);
+
+  const pickClockNode = (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 5,
+      background: `${clockCol}15`,
+      border: `1px solid ${clockCol}50`,
+      borderRadius: 7, padding: '3px 9px',
+      animation: clockSeconds <= 10 && isUserTurn ? 'commandPulse 0.6s ease-in-out infinite' : 'none',
+    }}>
+      <span style={{ fontSize: 10, color: clockCol, fontWeight: 700, opacity: 0.7 }}>⏱</span>
+      <span style={{ fontSize: 13, fontWeight: 900, color: clockCol, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
+        {formatClock(clockSeconds)}
+      </span>
+      <span style={{ fontSize: 9, color: clockCol, fontWeight: 700, opacity: 0.6 }}>
+        RD{currentRoundForClock}
+      </span>
+    </div>
+  );
+
   return (
     <DraftBoardLayout
       userTeam={userTeam}
@@ -1018,6 +1255,7 @@ export function DraftBoardPage() {
       onSkipToMyPick={() => { setPaused(false); simulateToUserPick(); }}
       renderProspectCard={renderProspectCard}
       incomingTradeOffer={incomingTradeOfferNode}
+      pickClock={pickClockNode}
     />
   );
 }
