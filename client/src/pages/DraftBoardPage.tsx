@@ -1,8 +1,10 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
 import { useDraftStore } from '../store/draftStore';
 import { NFL_TEAMS } from '../data/teams';
+import { IncomingTradeOffer } from '../components/draft/IncomingTradeOffer';
 import DraftBoard from '../components/draft/DraftBoard';
 import { POS, T, gradeColor, gradeLetter, teamLogoUrl } from '../styles/tokens';
 
@@ -151,45 +153,27 @@ function defaultProspectCard(prospect: BigBoardProspect, close: () => void): Rea
           color: T.txt,
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 10, color: T.txtMuted, letterSpacing: '0.12em', fontWeight: 700 }}>PROSPECT CARD</div>
-            <div style={{ marginTop: 4, fontSize: 18, fontWeight: 800 }}>{prospect.fullName}</div>
-            <div style={{ marginTop: 3, fontSize: 12, color: T.txtSub }}>{prospect.school}</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: T.txt, letterSpacing: '-.01em' }}>{prospect.fullName}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', borderRadius: 999, border: `1px solid ${posPalette.border}`, background: posPalette.bg, color: posPalette.text, padding: '4px 8px' }}>
+                {prospect.position}
+              </span>
+              <span style={{ color: T.txtSub, fontSize: 11 }}>{prospect.school}</span>
+              <span style={{ color: T.txtMuted, fontSize: 11 }}>#{prospect.rank}</span>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={close}
-            style={{
-              border: `1px solid ${T.border}`,
-              background: T.panel,
-              color: T.txtSub,
-              borderRadius: 8,
-              fontSize: 11,
-              padding: '6px 9px',
-              cursor: 'pointer',
-            }}
-          >
-            CLOSE
-          </button>
-        </div>
-        <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 800,
-              letterSpacing: '0.08em',
-              borderRadius: 999,
-              border: `1px solid ${posPalette.border}`,
-              background: posPalette.bg,
-              color: posPalette.text,
-              padding: '4px 8px',
-            }}
-          >
-            {prospect.position}
-          </span>
-          <span style={{ color: gradeColor(prospect.grade), fontWeight: 800 }}>{gradeLetter(prospect.grade)}</span>
-          <span style={{ color: T.txtSub, fontSize: 12 }}>Rank #{prospect.rank}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+            <div style={{ fontSize: 42, fontWeight: 900, color: gradeColor(prospect.grade), lineHeight: 1 }}>{gradeLetter(prospect.grade)}</div>
+            <button
+              type="button"
+              onClick={close}
+              style={{ border: `1px solid ${T.border}`, background: T.panel, color: T.txtSub, borderRadius: 8, fontSize: 11, padding: '6px 9px', cursor: 'pointer' }}
+            >
+              CLOSE
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -293,6 +277,7 @@ function DraftBoardLayout({
   return (
     <div
       style={{
+        position: 'relative',
         minHeight: '100vh',
         height: '100vh',
         background: T.bg,
@@ -844,7 +829,11 @@ function DraftBoardLayout({
 // ─── Store-connected page (used by App router with no props) ─────────────────
 export function DraftBoardPage() {
   const navigate = useNavigate();
-  const { session, availableProspects, simulateNextPick, simulateToUserPick, makePick } = useDraftStore();
+  const {
+    session, availableProspects,
+    simulateNextPick, simulateToUserPick, makePick,
+    incomingTradeOffer, generateAITradeOffer, respondToAITradeOffer, dismissTradeOffer,
+  } = useDraftStore();
 
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState<SimulationSpeed>('NORMAL');
@@ -939,6 +928,22 @@ export function DraftBoardPage() {
     ? (session.picks[session.currentPickIndex]?.isUserPick ?? false)
     : false;
 
+  // ── Fire trade offer the moment the user's pick arrives ──────────────────
+  const wasUserTurnRef = useRef(false);
+  useEffect(() => {
+    if (isUserTurn && !wasUserTurnRef.current) {
+      generateAITradeOffer();
+    }
+    wasUserTurnRef.current = isUserTurn;
+  }, [isUserTurn]);
+
+  // ── Auto-dismiss any offer that has expired ───────────────────────────────
+  useEffect(() => {
+    if (incomingTradeOffer && session && session.currentPickIndex > incomingTradeOffer.expiresAtPickIndex) {
+      dismissTradeOffer();
+    }
+  }, [session?.currentPickIndex]);
+
   const renderProspectCard = useCallback((prospect: BigBoardProspect, close: () => void) => {
     const posPalette = POS[prospect.position] ?? { bg: T.blueSub, border: T.borderFoc, text: T.blueBright, pill: T.panel };
     return (
@@ -949,17 +954,16 @@ export function DraftBoardPage() {
         <div onClick={e => e.stopPropagation()} style={{ width: 'min(480px,100%)', background: T.surface, border: `1px solid ${T.borderHi}`, borderRadius: 16, overflow: 'hidden' }}>
           {/* Header */}
           <div style={{ padding: '20px 20px 16px', borderBottom: `1px solid ${T.border}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 10, color: T.txtMuted, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase' }}>Prospect Card</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: T.txt, marginTop: 4, letterSpacing: '-.01em' }}>{prospect.fullName}</div>
-                <div style={{ fontSize: 13, color: T.txtSub, marginTop: 2 }}>{prospect.school}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: T.txt, letterSpacing: '-.01em' }}>{prospect.fullName}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 999, border: `1px solid ${posPalette.border}`, background: posPalette.bg, color: posPalette.text, padding: '4px 10px' }}>{prospect.position}</span>
+                  <span style={{ fontSize: 12, color: T.txtSub, fontWeight: 600 }}>{prospect.school}</span>
+                  <span style={{ fontSize: 12, color: T.txtMuted, fontWeight: 600 }}>#{prospect.rank}</span>
+                </div>
               </div>
-              <div style={{ fontSize: 36, fontWeight: 900, color: gradeColor(prospect.grade), lineHeight: 1 }}>{gradeLetter(prospect.grade)}</div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 999, border: `1px solid ${posPalette.border}`, background: posPalette.bg, color: posPalette.text, padding: '4px 10px' }}>{prospect.position}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, color: T.txtSub, padding: '4px 0' }}>Rank #{prospect.rank} · Grade {prospect.grade}</span>
+              <div style={{ fontSize: 48, fontWeight: 900, color: gradeColor(prospect.grade), lineHeight: 1, letterSpacing: '-.02em' }}>{gradeLetter(prospect.grade)}</div>
             </div>
           </div>
           {/* Actions */}
@@ -984,6 +988,22 @@ export function DraftBoardPage() {
     );
   }, [isUserTurn, makePick]);
 
+  // ── User's raw store picks (needed by IncomingTradeOffer for counter logic) ─
+  const userStorePicks = session?.picks.filter(p => p.isUserPick) ?? [];
+
+  const incomingTradeOfferNode = incomingTradeOffer ? (
+    <AnimatePresence>
+      <IncomingTradeOffer
+        key={incomingTradeOffer.id}
+        offer={incomingTradeOffer}
+        currentPickIndex={session?.currentPickIndex ?? 0}
+        userPicks={userStorePicks}
+        onAccept={() => respondToAITradeOffer(true)}
+        onDecline={() => dismissTradeOffer()}
+      />
+    </AnimatePresence>
+  ) : null;
+
   return (
     <DraftBoardLayout
       userTeam={userTeam}
@@ -997,6 +1017,7 @@ export function DraftBoardPage() {
       onSpeedChange={setSpeed}
       onSkipToMyPick={() => { setPaused(false); simulateToUserPick(); }}
       renderProspectCard={renderProspectCard}
+      incomingTradeOffer={incomingTradeOfferNode}
     />
   );
 }
