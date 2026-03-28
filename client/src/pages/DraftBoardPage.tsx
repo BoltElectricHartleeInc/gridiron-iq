@@ -9,6 +9,7 @@ import DraftBoard from '../components/draft/DraftBoard';
 import { POS, T, gradeColor, gradeLetter, teamLogoUrl } from '../styles/tokens';
 import { API_BASE } from '../lib/api';
 import type { Prospect } from '../types/draft';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 type SimulationSpeed = 'FAST' | 'NORMAL' | 'SLOW';
 type ValueTag = 'STEAL' | 'REACH' | 'VALUE';
@@ -413,8 +414,10 @@ function DraftBoardLayout({
   compareModal,
   style,
 }: DraftBoardPageProps) {
+  const isMobile = useIsMobile();
   const [activePosition, setActivePosition] = useState<(typeof POSITION_FILTERS)[number]>('ALL');
   const [selectedProspect, setSelectedProspect] = useState<BigBoardProspect | null>(null);
+  const [mobileTab, setMobileTab] = useState<'picks' | 'board' | 'mine'>('picks');
 
   const teamLookup = useMemo(() => {
     const map = new Map<string, TeamInfo>();
@@ -483,6 +486,221 @@ function DraftBoardLayout({
   }, [picks]);
 
   const closeProspectCard = () => setSelectedProspect(null);
+
+  // ─── MOBILE LAYOUT ──────────────────────────────────────────────────────────
+  if (isMobile) {
+    const roundGroups = picks.reduce<Record<number, typeof picks>>((acc, p) => {
+      (acc[p.round] = acc[p.round] ?? []).push(p);
+      return acc;
+    }, {});
+    const roundNums = Object.keys(roundGroups).map(Number).sort((a, b) => a - b);
+
+    return (
+      <div style={{ minHeight: '100vh', height: '100dvh', background: T.bg, color: T.txt, display: 'flex', flexDirection: 'column', fontFamily: T.fontBase, overflow: 'hidden' }}>
+        {/* Mobile header */}
+        <div style={{
+          flexShrink: 0, padding: '10px 14px 8px',
+          background: T.surface, borderBottom: `1px solid ${T.border}`,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <img src={teamLogoUrl(onClockTeam.abbreviation)} alt="" style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: isUsersTurn ? T.blueBright : T.txt, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isUsersTurn ? '🟢 YOUR TURN' : `${onClockTeam.abbreviation} ON THE CLOCK`}
+            </div>
+            <div style={{ fontSize: 11, color: T.txtSub }}>Pick #{currentOverallPick} · Round {currentRound}</div>
+          </div>
+          {pickClock && <div style={{ flexShrink: 0 }}>{pickClock}</div>}
+        </div>
+
+        {/* Tab bar */}
+        <div style={{
+          flexShrink: 0, display: 'flex', borderBottom: `1px solid ${T.border}`,
+          background: T.surface,
+        }}>
+          {([['picks','PICKS'],['board','BIG BOARD'],['mine','MY PICKS']] as const).map(([tab, label]) => (
+            <button key={tab} onClick={() => setMobileTab(tab)} style={{
+              flex: 1, padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
+              color: mobileTab === tab ? T.blueBright : T.txtMuted,
+              borderBottom: `2px solid ${mobileTab === tab ? T.blueBright : 'transparent'}`,
+              transition: 'color 140ms',
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' } as CSSProperties}>
+
+          {/* ── PICKS TAB ── */}
+          {mobileTab === 'picks' && (
+            <div style={{ padding: '8px 0 80px' }}>
+              {roundNums.map(rnd => (
+                <div key={rnd}>
+                  <div style={{ padding: '8px 14px 4px', fontSize: 9, fontWeight: 800, letterSpacing: '.14em', color: T.txtMuted, position: 'sticky', top: 0, background: T.bg, zIndex: 2 }}>
+                    ROUND {rnd}
+                  </div>
+                  {roundGroups[rnd].map(pick => {
+                    const isCurrent = pick.overall === currentOverallPick;
+                    const name = pick.player?.fullName ?? pick.player?.name;
+                    const last = name ? name.split(' ').slice(-1)[0] : null;
+                    return (
+                      <div key={pick.overall} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 14px', minHeight: 44,
+                        background: isCurrent ? `${T.blueBright}12` : 'transparent',
+                        borderLeft: `3px solid ${isCurrent ? T.blueBright : 'transparent'}`,
+                      }}>
+                        <span style={{ fontSize: 10, color: T.txtMuted, fontWeight: 700, minWidth: 28 }}>#{pick.overall}</span>
+                        <img src={teamLogoUrl(pick.team.abbreviation)} alt="" style={{ width: 22, height: 22, objectFit: 'contain', flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, color: T.txtSub, fontWeight: 600, minWidth: 30 }}>{pick.team.abbreviation}</span>
+                        {last ? (
+                          <>
+                            <span style={{ flex: 1, fontSize: 13, fontWeight: 800, color: pick.isUserTeam ? T.gold : T.txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {last}
+                            </span>
+                            <span style={{ fontSize: 10, color: T.txtSub, fontWeight: 600, flexShrink: 0 }}>{pick.player?.position}</span>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: gradeColor(pick.player?.grade ?? 70), flexShrink: 0 }}>{gradeLetter(pick.player?.grade ?? 70)}</span>
+                          </>
+                        ) : isCurrent ? (
+                          <span style={{ flex: 1, fontSize: 11, color: T.blueBright, fontWeight: 700, fontStyle: 'italic' }}>On the clock…</span>
+                        ) : (
+                          <span style={{ flex: 1, fontSize: 11, color: T.txtMuted }}>—</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── BIG BOARD TAB ── */}
+          {mobileTab === 'board' && (
+            <div style={{ paddingBottom: 80 }}>
+              {/* Position filter */}
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '10px 14px 8px', WebkitOverflowScrolling: 'touch' } as CSSProperties}>
+                {POSITION_FILTERS.map(pos => (
+                  <button key={pos} onClick={() => setActivePosition(pos)} style={{
+                    flexShrink: 0, padding: '5px 12px', borderRadius: 999, border: `1px solid ${activePosition === pos ? T.blueBright : T.border}`,
+                    background: activePosition === pos ? T.blueSub : T.panel,
+                    color: activePosition === pos ? T.blueBright : T.txtSub,
+                    fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '.04em',
+                  }}>{pos}</button>
+                ))}
+              </div>
+              {filteredProspects.slice(0, 60).map((p, i) => {
+                const pal = POS[p.position] ?? { text: T.txtSub, bg: T.panel, border: T.border };
+                return (
+                  <button key={p.id ?? p.fullName} onClick={() => { setSelectedProspect(p); setMobileTab('board'); }} style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer',
+                    borderBottom: `1px solid ${T.border}30`, textAlign: 'left', minHeight: 52,
+                  }}>
+                    <span style={{ fontSize: 11, color: T.txtMuted, fontWeight: 700, minWidth: 24 }}>{i + 1}</span>
+                    <span style={{
+                      fontSize: 9, fontWeight: 800, borderRadius: 6, padding: '3px 7px',
+                      background: pal.bg, border: `1px solid ${pal.border}`, color: pal.text, flexShrink: 0,
+                    }}>{p.position}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: T.txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.fullName}</div>
+                      <div style={{ fontSize: 11, color: T.txtSub }}>{p.school}</div>
+                    </div>
+                    <span style={{ fontSize: 18, fontWeight: 900, color: gradeColor(p.grade), flexShrink: 0 }}>{gradeLetter(p.grade)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── MY PICKS TAB ── */}
+          {mobileTab === 'mine' && (
+            <div style={{ padding: '12px 14px 80px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.14em', color: T.txtMuted, marginBottom: 4 }}>
+                DRAFTED — {myCompletedPicks.length} of {myPicksTotal}
+              </div>
+              {myCompletedPicks.map(pick => {
+                const name = pick.player?.fullName ?? pick.player?.name ?? '—';
+                const grade = pick.player?.grade ?? 70;
+                return (
+                  <div key={pick.overall} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                    background: T.surface, border: `1px solid ${T.green}30`, borderRadius: 12,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: T.txt }}>{name}</div>
+                      <div style={{ fontSize: 12, color: T.txtSub, marginTop: 2 }}>Round {pick.round} · Pick #{pick.overall} · {pick.player?.position}</div>
+                    </div>
+                    <div style={{ fontSize: 26, fontWeight: 900, color: gradeColor(grade) }}>{gradeLetter(grade)}</div>
+                  </div>
+                );
+              })}
+              {myCompletedPicks.length === 0 && (
+                <div style={{ textAlign: 'center', color: T.txtMuted, padding: '40px 0', fontSize: 14 }}>No picks yet</div>
+              )}
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.14em', color: T.txtMuted, marginTop: 8, marginBottom: 4 }}>UPCOMING PICKS</div>
+              {myUpcomingPicks.map(pick => (
+                <div key={pick.overall} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                  background: T.panel, border: `1px dashed ${T.border}`, borderRadius: 12, opacity: 0.7,
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.txtSub }}>Round {pick.round} — Pick #{pick.overall}</div>
+                    <div style={{ fontSize: 12, color: T.txtMuted }}>Projected: {pick.positionProjection}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Prospect card bottom sheet on mobile */}
+        {selectedProspect &&
+          (renderProspectCard
+            ? renderProspectCard(selectedProspect, closeProspectCard)
+            : <div onClick={closeProspectCard} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.8)', display: 'grid', placeItems: 'end' }}>
+                <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: T.surface, borderTop: `1px solid ${T.borderHi}`, borderRadius: '18px 18px 0 0', padding: '20px 16px 32px', maxHeight: '80vh', overflowY: 'auto' }}>
+                  <div style={{ width: 40, height: 4, background: T.border, borderRadius: 2, margin: '0 auto 18px' }} />
+                  <div style={{ fontSize: 22, fontWeight: 900, color: T.txt }}>{selectedProspect.fullName}</div>
+                  <div style={{ fontSize: 14, color: T.txtSub, marginTop: 4 }}>{selectedProspect.position} · {selectedProspect.school}</div>
+                  <div style={{ fontSize: 48, fontWeight: 900, color: gradeColor(selectedProspect.grade), marginTop: 12 }}>{gradeLetter(selectedProspect.grade)}</div>
+                  <button onClick={closeProspectCard} style={{ marginTop: 20, width: '100%', padding: '14px 0', background: T.border, border: 'none', borderRadius: 12, color: T.txt, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Close</button>
+                </div>
+              </div>
+          )}
+
+        {/* Fixed bottom action bar */}
+        <div style={{
+          flexShrink: 0, background: T.surface, borderTop: `1px solid ${T.border}`,
+          padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))',
+          display: 'flex', gap: 8, alignItems: 'center',
+        }}>
+          <button onClick={onPauseToggle} style={{
+            padding: '10px 14px', background: paused ? T.blueSub : T.panel,
+            border: `1px solid ${paused ? T.blueBright : T.border}`,
+            borderRadius: 10, color: paused ? T.blueBright : T.txtSub,
+            fontWeight: 700, fontSize: 13, cursor: 'pointer',
+          }}>{paused ? '▶ RESUME' : '⏸ PAUSE'}</button>
+          <button onClick={onSkipToMyPick} style={{
+            flex: 1, padding: '10px 0', background: T.panel, border: `1px solid ${T.border}`,
+            borderRadius: 10, color: T.txtSub, fontWeight: 700, fontSize: 12, cursor: 'pointer',
+          }}>SKIP TO MY PICK</button>
+          {isUsersTurn && (
+            <button onClick={() => setMobileTab('board')} style={{
+              flex: 1, padding: '10px 0',
+              background: `linear-gradient(135deg, ${T.blueBright}, ${T.blue})`,
+              border: 'none', borderRadius: 10, color: '#fff',
+              fontWeight: 800, fontSize: 13, cursor: 'pointer',
+              animation: 'commandPulse 1.5s ease-in-out infinite',
+            }}>🏈 MAKE PICK</button>
+          )}
+        </div>
+
+        {incomingTradeOffer}
+        {tradeModal}
+      </div>
+    );
+  }
 
   return (
     <div

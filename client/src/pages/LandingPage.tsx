@@ -98,6 +98,7 @@ const MODS: Mod[] = [
 export default function LandingPage() {
   const navigate = useNavigate();
   const { session } = useDraftStore();
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const isDrafting = session?.status === 'drafting';
   const userTeam = isDrafting
     ? NFL_TEAMS.find((t) => t.id === session?.userTeamId)
@@ -162,8 +163,12 @@ export default function LandingPage() {
           gap: 40px;
         }
         @media (max-width: 700px) {
-          .mod-card-wide { flex-direction: column; align-items: flex-start; gap: 16px; }
+          .mod-card-wide { flex-direction: column; align-items: flex-start; gap: 16px; min-height: 140px; }
           .mod-grid { grid-template-columns: 1fr !important; }
+          .mod-card { padding: 20px 18px 18px; min-height: 130px; }
+          .stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .hero-btns { flex-direction: column !important; }
+          .hero-btns button { width: 100% !important; }
         }
 
         .stat-card {
@@ -207,20 +212,22 @@ export default function LandingPage() {
       `}</style>
 
       {/* ── Navbar ── */}
-      <nav style={{ height: 60, borderBottom: '1px solid #172033', background: 'rgba(5,8,15,.9)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 28px', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-.02em' }}>GridironIQ</span>
-          <span style={{ color: '#172033', fontSize: 18 }}>|</span>
-          <span style={{ fontSize: 10, color: '#2A4060', fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>Front Office Platform</span>
+      <nav style={{ height: isMobile ? 52 : 60, borderBottom: '1px solid #172033', background: 'rgba(5,8,15,.9)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 16px' : '0 28px', position: 'sticky', top: 0, zIndex: 100 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 900, letterSpacing: '-.02em' }}>{isMobile ? 'GIQ' : 'GridironIQ'}</span>
+          {!isMobile && <>
+            <span style={{ color: '#172033', fontSize: 18 }}>|</span>
+            <span style={{ fontSize: 10, color: '#2A4060', fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>Front Office Platform</span>
+          </>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'rgba(0,200,83,.08)', border: '1px solid rgba(0,200,83,.25)', borderRadius: 999, padding: '6px 12px' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#00C853', display: 'inline-block', animation: 'pulse 1.2s ease-in-out infinite' }} />
-            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: '#00C853' }}>2026 NFL DRAFT LIVE</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,200,83,.08)', border: '1px solid rgba(0,200,83,.25)', borderRadius: 999, padding: isMobile ? '5px 10px' : '6px 12px' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00C853', display: 'inline-block', animation: 'pulse 1.2s ease-in-out infinite' }} />
+            <span style={{ fontSize: isMobile ? 9 : 10, fontWeight: 800, letterSpacing: '.1em', color: '#00C853' }}>{isMobile ? 'LIVE' : '2026 NFL DRAFT LIVE'}</span>
           </div>
           {isDrafting && (
-            <button className="resume-btn" style={{ padding: '8px 20px', fontSize: 12, borderRadius: 8 }} onClick={() => navigate('/draft/board')}>
-              Resume Draft →
+            <button className="resume-btn" style={{ padding: '8px 16px', fontSize: 12, borderRadius: 8 }} onClick={() => navigate('/draft/board')}>
+              Resume →
             </button>
           )}
         </div>
@@ -243,7 +250,7 @@ export default function LandingPage() {
       </div>
 
       {/* ── Hero ── */}
-      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '72px 28px 48px', animation: 'fadeUp .6s ease both' }}>
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '36px 16px 32px' : '72px 28px 48px', animation: 'fadeUp .6s ease both' }}>
 
         {/* Active draft resume banner */}
         {isDrafting && userTeam && (
@@ -273,11 +280,11 @@ export default function LandingPage() {
           </span>
         </h1>
 
-        <p style={{ fontSize: 18, color: '#6888A8', fontWeight: 500, lineHeight: 1.6, maxWidth: 560, marginBottom: 36 }}>
+        <p style={{ fontSize: isMobile ? 15 : 18, color: '#6888A8', fontWeight: 500, lineHeight: 1.6, maxWidth: 560, marginBottom: 32 }}>
           Mock draft like a real GM. 480 real 2026 prospects, AI war room advisor, live trade engine, and full scouting reports on every player.
         </p>
 
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <div className="hero-btns" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button className="resume-btn" onClick={() => navigate('/draft/select')}>
             {isDrafting ? 'Resume War Room →' : 'Start New Draft →'}
           </button>
@@ -290,7 +297,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Module grid ── */}
-      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '0 28px 64px' }}>
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '0 14px calc(80px + env(safe-area-inset-bottom,0px))' : '0 28px 64px' }}>
         <div
           className="mod-grid"
           style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}
@@ -338,8 +345,8 @@ export default function LandingPage() {
       </section>
 
       {/* ── Stats bar ── */}
-      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '0 28px 80px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '0 14px 32px' : '0 28px 80px' }}>
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: isMobile ? 10 : 16 }}>
           {[
             { n: '759', label: 'Prospects', sub: '2026 & 2027 classes' },
             { n: '32', label: 'NFL Teams', sub: 'All franchises' },

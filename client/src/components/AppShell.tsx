@@ -3,7 +3,8 @@
  * Provides: sticky nav, dark background, Inter font, global animation styles.
  */
 import type { ReactNode, CSSProperties } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export const C = {
   bg:        '#05080F',
@@ -89,6 +90,65 @@ type AppShellProps = {
   style?: CSSProperties;
 };
 
+// ─── Bottom Tab Bar (mobile only) ─────────────────────────────────────────────
+const TABS = [
+  { label: 'Home',    icon: '🏠', path: '/' },
+  { label: 'Draft',   icon: '📋', path: '/draft/select' },
+  { label: 'Game',    icon: '🏈', path: '/game' },
+  { label: 'Fantasy', icon: '⭐', path: '/fantasy' },
+  { label: 'Scout',   icon: '🔍', path: '/scouting' },
+];
+
+function BottomTabBar() {
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const active = (path: string) =>
+    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+
+  return (
+    <nav style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200,
+      background: `rgba(5,8,15,0.97)`, backdropFilter: 'blur(20px)',
+      borderTop: `1px solid ${C.border}`,
+      display: 'flex', alignItems: 'stretch',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+    }}>
+      {TABS.map(tab => {
+        const isActive = active(tab.path);
+        return (
+          <button
+            key={tab.path}
+            onClick={() => navigate(tab.path)}
+            style={{
+              flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', gap: 3, paddingTop: 8, paddingBottom: 4,
+              color: isActive ? C.blueBright : C.txtMuted,
+              transition: 'color 140ms',
+              minHeight: 0,
+            }}
+          >
+            <span style={{ fontSize: 20, lineHeight: 1 }}>{tab.icon}</span>
+            <span style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
+              color: isActive ? C.blueBright : C.txtMuted,
+            }}>
+              {tab.label.toUpperCase()}
+            </span>
+            {isActive && (
+              <span style={{
+                position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px))',
+                width: 28, height: 2, background: C.blueBright, borderRadius: 2,
+              }} />
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function AppShell({
   children,
   title,
@@ -100,7 +160,8 @@ export function AppShell({
   noPad = false,
   style,
 }: AppShellProps) {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const isMobile  = useIsMobile();
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.txt, fontFamily: C.font, ...style }}>
@@ -109,37 +170,39 @@ export function AppShell({
       {/* ── Nav ── */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
-        height: 56, background: `rgba(5,8,15,.92)`, backdropFilter: 'blur(14px)',
+        height: isMobile ? 50 : 56,
+        background: `rgba(5,8,15,.95)`, backdropFilter: 'blur(14px)',
         borderBottom: `1px solid ${C.border}`,
         display: 'flex', alignItems: 'center',
-        padding: '0 20px', gap: 12,
+        padding: isMobile ? '0 14px' : '0 20px', gap: 10,
       }}>
         {/* Left */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
           {backTo ? (
             <button
               onClick={() => navigate(backTo)}
               style={{
                 background: 'none', border: `1px solid ${C.border}`,
                 borderRadius: 8, color: C.txtSub, cursor: 'pointer',
-                fontSize: 12, fontWeight: 700, padding: '6px 12px',
-                display: 'flex', alignItems: 'center', gap: 6,
-                transition: 'border-color 160ms, color 160ms',
+                fontSize: isMobile ? 11 : 12, fontWeight: 700,
+                padding: isMobile ? '5px 10px' : '6px 12px',
+                display: 'flex', alignItems: 'center', gap: 5,
+                minHeight: 36,
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.borderHi; (e.currentTarget as HTMLButtonElement).style.color = C.txt; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.txtSub; }}
             >
-              ← {backLabel}
+              ← {!isMobile && backLabel}
             </button>
           ) : (
             <button
               onClick={() => navigate('/')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, minHeight: 'auto' }}
             >
-              <span style={{ fontSize: 17, fontWeight: 900, letterSpacing: '-.02em', color: C.txt }}>GridironIQ</span>
+              <span style={{ fontSize: isMobile ? 15 : 17, fontWeight: 900, letterSpacing: '-.02em', color: C.txt }}>
+                {isMobile ? 'GIQ' : 'GridironIQ'}
+              </span>
             </button>
           )}
-          {title && (
+          {title && !isMobile && (
             <>
               <span style={{ color: C.border, fontSize: 16 }}>|</span>
               <span style={{ fontSize: 14, fontWeight: 700, color: C.txt, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -147,28 +210,35 @@ export function AppShell({
               </span>
             </>
           )}
+          {title && isMobile && (
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {title}
+            </span>
+          )}
         </div>
 
         {/* Center */}
-        {navCenter && (
+        {navCenter && !isMobile && (
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
             {navCenter}
           </div>
         )}
-        {!navCenter && <div style={{ flex: 1 }} />}
 
         {/* Right */}
-        {right && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>{right}</div>}
+        {right && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>{right}</div>}
       </nav>
 
       {/* ── Content ── */}
-      <div style={noPad ? undefined : {
+      <div style={noPad ? { paddingBottom: isMobile ? 'calc(60px + env(safe-area-inset-bottom, 0px))' : 0 } : {
         maxWidth,
         margin: '0 auto',
-        padding: '32px 24px 64px',
+        padding: isMobile ? '16px 14px calc(80px + env(safe-area-inset-bottom, 0px))' : '32px 24px 64px',
       }}>
         {children}
       </div>
+
+      {/* ── Bottom tab bar (mobile only) ── */}
+      {isMobile && <BottomTabBar />}
     </div>
   );
 }

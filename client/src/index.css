@@ -1,2 +1,23 @@
-* { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
-body { background: #06090F; color: #DDE8F4; }
+* { font-family: 'Inter', -apple-system, system-ui, sans-serif; box-sizing: border-box; }
+body { background: #06090F; color: #DDE8F4; margin: 0; -webkit-tap-highlight-color: transparent; }
+
+/* Touch-friendly minimum target size */
+button, a, [role="button"] { min-height: 44px; touch-action: manipulation; }
+
+/* Remove 300ms tap delay on mobile */
+html { touch-action: manipulation; }
+
+/* Prevent text selection on interactive elements */
+button { user-select: none; -webkit-user-select: none; }
+
+/* Safe area insets for notched phones */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Bottom tab bar spacer — pages need extra bottom padding on mobile */
+.mobile-bottom-pad { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+
+/* Smooth scrolling */
+html { scroll-behavior: smooth; }
+
+/* Prevent horizontal overflow */
+body { overflow-x: hidden; }
