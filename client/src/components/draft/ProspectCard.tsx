@@ -108,6 +108,11 @@ export function ProspectCard({ prospect }: Props) {
   const [parsedStrengths, setParsedStrengths] = useState<string[]>([]);
   const [parsedConcerns, setParsedConcerns] = useState<string[]>([]);
 
+  // Q&A chat with the AI scout
+  const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+
   const fetchScoutReport = async () => {
     setScoutLoading(true);
     setScoutReport('');
@@ -195,6 +200,64 @@ export function ProspectCard({ prospect }: Props) {
     if (scoutReport) return;
 
     await fetchScoutReport();
+  };
+
+  const askScout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = chatInput.trim();
+    if (!q || chatLoading) return;
+
+    const userMsg = { role: 'user' as const, content: q };
+    const newHistory = [...chatMessages, userMsg];
+    setChatMessages(newHistory);
+    setChatInput('');
+    setChatLoading(true);
+
+    // Placeholder for streaming answer
+    setChatMessages([...newHistory, { role: 'assistant', content: '' }]);
+
+    try {
+      const res = await fetch(API_BASE + '/api/scouting/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prospect: {
+            name: prospect.name,
+            position: prospect.position,
+            college: prospect.college,
+            grade: prospect.grade,
+            traits: prospect.traits,
+            height: prospect.height,
+            weight: prospect.weight,
+            comparableTo: prospect.comparableTo,
+          },
+          report: scoutReport,
+          // Only pass user/assistant turns (no system prompt in history)
+          messages: chatMessages.map(m => ({ role: m.role, content: m.content })),
+          question: q,
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        setChatMessages([...newHistory, { role: 'assistant', content: 'Scout unavailable right now.' }]);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let answer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        answer += decoder.decode(value, { stream: true });
+        setChatMessages([...newHistory, { role: 'assistant', content: answer }]);
+      }
+    } catch {
+      setChatMessages([...newHistory, { role: 'assistant', content: 'Scout unavailable right now.' }]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   return (
@@ -298,6 +361,56 @@ export function ProspectCard({ prospect }: Props) {
             <span className="text-white/30">Analyzing prospect…</span>
           ) : (
             scoutReport
+          )}
+
+          {/* Q&A chat — appears once the report is done */}
+          {scoutReport && !scoutLoading && (
+            <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(99,102,241,0.15)' }}>
+              {/* Chat history */}
+              {chatMessages.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className="text-xs rounded-lg px-2.5 py-1.5 max-w-[85%] leading-relaxed"
+                        style={
+                          msg.role === 'user'
+                            ? { background: 'rgba(99,102,241,0.25)', color: 'rgba(255,255,255,0.85)' }
+                            : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }
+                        }
+                      >
+                        {msg.content || <span className="opacity-40 italic">…</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Input */}
+              <form onSubmit={askScout} className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  placeholder="Ask the scout…"
+                  disabled={chatLoading}
+                  className="flex-1 text-xs rounded-lg px-2.5 py-1.5 outline-none"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(99,102,241,0.2)',
+                    color: 'rgba(255,255,255,0.7)',
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim()}
+                  className="text-xs px-3 py-1.5 rounded-lg font-semibold transition-opacity disabled:opacity-30"
+                  style={{ background: 'rgba(99,102,241,0.3)', color: '#a5b4fc' }}
+                >
+                  {chatLoading ? '…' : 'Ask'}
+                </button>
+              </form>
+            </div>
           )}
         </div>
       )}
