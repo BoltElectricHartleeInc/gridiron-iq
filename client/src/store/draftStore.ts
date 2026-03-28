@@ -224,7 +224,8 @@ function getAIPickForTeam(
 function getPickIndicator(pick: DraftPick): 'steal' | 'reach' | 'value' | null {
   if (!pick.prospect) return null;
   // Use grade-vs-expected-grade at this pick position (same curve as calculateTeamGrade)
-  const expectedGrade = Math.max(55, 99 - pick.overall * 0.145);
+  // Realistic draft curve: pick 1 → 97, pick 32 → 84, pick 64 → 70, pick 100+ → 55 floor
+  const expectedGrade = Math.max(55, 97 - (pick.overall - 1) * 0.43);
   const delta = pick.prospect.grade - expectedGrade;
   if (delta >= 7) return 'steal';   // meaningfully above expected grade
   if (delta <= -6) return 'reach';  // meaningfully below expected grade
@@ -269,8 +270,8 @@ function calculateTeamGrade(teamId: string, picks: DraftPick[]): DraftGrade {
     const prospect = pick.prospect!;
 
     // Expected grade at this pick position using a realistic draft curve:
-    // Pick #1 → ~97, Pick #32 → ~85, Pick #64 → ~78, Pick #128 → ~72, Pick #224 → ~65
-    const expectedGrade = Math.max(55, 99 - pick.overall * 0.145);
+    // Pick #1 → 97, Pick #32 → 84, Pick #64 → 70, Pick #128 → 57, Pick #224+ → 55 floor
+    const expectedGrade = Math.max(55, 97 - (pick.overall - 1) * 0.43);
     const delta = prospect.grade - expectedGrade;
 
     // Score on a 0–100 scale based on grade vs expectation at this pick
@@ -302,13 +303,13 @@ function calculateTeamGrade(teamId: string, picks: DraftPick[]): DraftGrade {
 
   const stealCount = teamPicks.filter(p => {
     if (!p.prospect) return false;
-    const exp = Math.max(55, 99 - p.overall * 0.145);
+    const exp = Math.max(55, 97 - (p.overall - 1) * 0.43);
     return p.prospect.grade - exp >= 7;
   }).length;
 
   const reachCount = teamPicks.filter(p => {
     if (!p.prospect) return false;
-    const exp = Math.max(55, 99 - p.overall * 0.145);
+    const exp = Math.max(55, 97 - (p.overall - 1) * 0.43);
     return p.prospect.grade - exp <= -6;
   }).length;
 
