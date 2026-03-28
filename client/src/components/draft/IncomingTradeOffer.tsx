@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NFL_TEAMS } from '../../data/teams';
 import type { AITradeOffer, DraftPick } from '../../types/draft';
@@ -40,6 +40,13 @@ export function IncomingTradeOffer({ offer, currentPickIndex, userPicks, onAccep
   const valuePct = Math.min(100, Math.round((totalOffer / Math.max(requestedValue, 1)) * 100));
   const isFavorable = totalOffer >= requestedValue * 0.95;
 
+  // Auto-dismiss when the pick this offer is for has already passed
+  useEffect(() => {
+    if (picksLeft < 0) {
+      onDecline();
+    }
+  }, [picksLeft]);
+
   // Counter offer state
   const [counterState, setCounterState] = useState<CounterState>('idle');
   // Available picks for counter: user's upcoming picks excluding the one being asked for
@@ -66,7 +73,7 @@ export function IncomingTradeOffer({ offer, currentPickIndex, userPicks, onAccep
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 420, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="absolute right-0 top-0 bottom-0 z-40 flex items-center pointer-events-none"
+      className="absolute right-0 top-0 bottom-0 z-30 flex items-center pointer-events-none"
       style={{ width: counterState === 'editing' ? '480px' : '380px' }}
     >
       <div
@@ -247,6 +254,7 @@ export function IncomingTradeOffer({ offer, currentPickIndex, userPicks, onAccep
               <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
                 Offer: {Math.round(totalOffer)} pts
               </span>
+              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
               <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
                 Asked: {requestedValue} pts
               </span>

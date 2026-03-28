@@ -325,17 +325,29 @@ export function DFSPage() {
             </div>
             {filteredPlayers.map((player) => {
               const inLineup = usedPlayerIds.has(player.id);
-              const canAdd = focusedSlot && SLOT_CONFIG[focusedSlot].eligible.includes(player.position) && !inLineup;
+              // Find the first open slot eligible for this player (prefer focused slot)
+              const targetSlot: DFSSlotType | null = (() => {
+                if (inLineup) return null;
+                if (focusedSlot && SLOT_CONFIG[focusedSlot].eligible.includes(player.position)) {
+                  const slot = dfsContest.lineup.find((s) => s.slot === focusedSlot && s.playerId === null);
+                  if (slot) return focusedSlot;
+                }
+                const openSlot = dfsContest.lineup.find(
+                  (s) => s.playerId === null && SLOT_CONFIG[s.slot].eligible.includes(player.position)
+                );
+                return openSlot ? openSlot.slot : null;
+              })();
+              const canAdd = targetSlot !== null;
               return (
                 <DFSPlayerRow
                   key={player.id}
                   player={player}
                   inLineup={inLineup}
-                  canAdd={!!canAdd}
+                  canAdd={canAdd}
                   isLocked={dfsContest.lockedIn}
                   onAdd={() => {
-                    if (focusedSlot && canAdd) {
-                      setDFSSlot(focusedSlot, player.id);
+                    if (targetSlot) {
+                      setDFSSlot(targetSlot, player.id);
                       setFocusedSlot(null);
                     }
                   }}

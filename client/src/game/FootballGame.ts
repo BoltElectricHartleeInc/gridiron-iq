@@ -72,6 +72,9 @@ export default class FootballGame extends Phaser.Scene {
   private options: GameOptions = {};
   private offenseTeamId = "HOME";
   private defenseTeamId = "AWAY";
+  // Fixed labels for scoreboard — never change on possession swap
+  private homeTeamLabel = "HOME";
+  private awayTeamLabel = "AWAY";
   private homeScore = 0;
   private awayScore = 0;
   private quarter = 1;
@@ -167,6 +170,8 @@ export default class FootballGame extends Phaser.Scene {
     this.options = (this.registry.get("gameOptions") as GameOptions | undefined) ?? {};
     this.offenseTeamId = (this.options.homeTeamId ?? "HOME").toUpperCase();
     this.defenseTeamId = (this.options.awayTeamId ?? "AWAY").toUpperCase();
+    this.homeTeamLabel = this.offenseTeamId;
+    this.awayTeamLabel = this.defenseTeamId;
     this.cameras.main.setBackgroundColor(0x113311);
 
     this.keys = this.input.keyboard!.addKeys({
@@ -1526,10 +1531,12 @@ export default class FootballGame extends Phaser.Scene {
       this.phase === PlayPhase.KICKOFF_RET ? "RETURN" :
       this.phase === PlayPhase.PUNT       ? "PUNT" :
       this.phase === PlayPhase.FG_ATTEMPT ? "FG METER" : "DEAD";
+    // Only show the play clock number during active play phases
+    const showPlayClock = this.phase === PlayPhase.PRE_SNAP || this.phase === PlayPhase.LIVE_PLAY;
     this.scoreboardText.setText(
-      `${this.awayScore} ${this.defenseTeamId}   @   ${this.homeScore} ${this.offenseTeamId}   |   Q${this.quarter} ${this.msToClock(this.gameClockMs)}   |   ${this.down}${this.ordinal(this.down)} & ${this.distance}`,
+      `${this.awayScore} ${this.awayTeamLabel}   @   ${this.homeScore} ${this.homeTeamLabel}   |   Q${this.quarter} ${this.msToClock(this.gameClockMs)}   |   ${this.down}${this.ordinal(this.down)} & ${this.distance}`,
     );
-    this.playClockText.setText(`${phaseLabel}   |   ⏱ ${Math.ceil(this.playClock)}`);
+    this.playClockText.setText(showPlayClock ? `${phaseLabel}   |   ⏱ ${Math.ceil(this.playClock)}` : phaseLabel);
   }
 
   private toggleInCanvasBox(): void {
@@ -1541,7 +1548,7 @@ export default class FootballGame extends Phaser.Scene {
     const bg = this.add.rectangle(640, 360, 700, 360, 0x000000, 0.78).setDepth(70);
     const txt = this.add.text(320, 220, [
       "LIVE BOX SCORE",
-      `${this.defenseTeamId} ${this.awayScore}   —   ${this.offenseTeamId} ${this.homeScore}`,
+      `${this.awayTeamLabel} ${this.awayScore}   —   ${this.homeTeamLabel} ${this.homeScore}`,
       "",
       `Pass Yds   ${a.passing.yards} | ${h.passing.yards}`,
       `Rush Yds   ${a.rushing.yards} | ${h.rushing.yards}`,

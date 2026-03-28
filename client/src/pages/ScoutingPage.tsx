@@ -165,6 +165,24 @@ export function ScoutingPage() {
   return (
     <>
       <style>{GLOBAL_CSS}</style>
+      <style>{`
+        @media (max-width: 768px) {
+          .scouting-sidebar { display: none !important; }
+          .scouting-board-header { grid-template-columns: 40px 36px 1fr 56px 40px 28px !important; }
+          .scouting-board-row { grid-template-columns: 40px 36px 1fr 56px 40px 28px !important; }
+          .scouting-board-header > *:nth-child(5),
+          .scouting-board-header > *:nth-child(6),
+          .scouting-board-header > *:nth-child(7),
+          .scouting-board-header > *:nth-child(8),
+          .scouting-board-row > *:nth-child(5),
+          .scouting-board-row > *:nth-child(6),
+          .scouting-board-row > *:nth-child(7),
+          .scouting-board-row > *:nth-child(8) { display: none !important; }
+          .scouting-scout-panel { width: 100% !important; position: fixed !important; inset: 0 !important; z-index: 300; overflow-y: auto !important; }
+          .scouting-mobile-search { display: flex !important; }
+        }
+        .scouting-mobile-search { display: none; }
+      `}</style>
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: C.font, overflow: 'hidden', color: C.txt }}>
 
         {/* ── TOP NAV ── */}
@@ -226,11 +244,35 @@ export function ScoutingPage() {
           )}
         </nav>
 
+        {/* ── MOBILE SEARCH BAR (hidden on desktop via CSS) ── */}
+        <div className="scouting-mobile-search" style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}`, background: C.surface, gap: 8, alignItems: 'center' }}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search player or school…"
+            style={{
+              flex: 1, background: C.panel, border: `1px solid ${C.border}`,
+              borderRadius: 8, padding: '7px 10px', fontSize: 12, color: C.txt,
+              outline: 'none',
+            }}
+          />
+          <select
+            value={posFilter}
+            onChange={e => setPosFilter(e.target.value as PositionFilter)}
+            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 8px', fontSize: 12, color: C.txt, outline: 'none' }}
+          >
+            {(['ALL', 'QB', 'RB', 'WR', 'TE', 'OT', 'OG', 'EDGE', 'DT', 'LB', 'CB', 'S'] as PositionFilter[]).map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+
         {/* ── MAIN LAYOUT ── */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
           {/* ── LEFT SIDEBAR FILTERS ── */}
-          <div style={{
+          <div className="scouting-sidebar" style={{
             width: 180, flexShrink: 0, display: 'flex', flexDirection: 'column',
             borderRight: `1px solid ${C.border}`, overflowY: 'auto', background: C.surface,
           }}>
@@ -307,7 +349,7 @@ export function ScoutingPage() {
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
             {/* Table header */}
-            <div style={{
+            <div className="scouting-board-header" style={{
               display: 'grid',
               gridTemplateColumns: '46px 44px 1fr 72px 130px 56px 48px 48px 48px',
               padding: '8px 14px',
@@ -420,6 +462,7 @@ export function ScoutingPage() {
                   return (
                     <motion.div
                       key={prospect.id}
+                      className="scouting-board-row"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: Math.min(idx * 0.007, 0.25) }}
@@ -538,6 +581,7 @@ export function ScoutingPage() {
 
               return (
                 <motion.div
+                  className="scouting-scout-panel"
                   initial={{ x: '100%', opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: '100%', opacity: 0 }}

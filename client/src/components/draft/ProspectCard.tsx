@@ -40,6 +40,50 @@ interface Props {
   prospect: Prospect;
 }
 
+const DEFAULT_STRENGTHS: Record<string, string[]> = {
+  QB:   ['Pre-snap processing', 'Arm talent', 'Pocket mobility'],
+  RB:   ['Vision between tackles', 'Contact balance', 'Pass protection'],
+  WR:   ['Route precision', 'Separation quickness', 'Ball tracking'],
+  TE:   ['Blocking versatility', 'Seam stretching', 'Red zone target'],
+  OT:   ['Pass-set footwork', 'Anchor strength', 'Length and athleticism'],
+  OG:   ['Drive block power', 'Pull efficiency', 'Gap sealing'],
+  C:    ['Line communication', 'Shotgun snapping', 'Interior leverage'],
+  EDGE: ['Pass-rush repertoire', 'Motor off the snap', 'Bend around corner'],
+  DT:   ['Gap penetration', 'Two-gap control', 'Interior push'],
+  LB:   ['Sideline-to-sideline range', 'Blitz timing', 'Instincts in zone'],
+  CB:   ['Press technique', 'Ball production', 'Hip fluidity'],
+  S:    ['Zone recognition', 'Run-support angles', 'Range as centerfielder'],
+  DE:   ['Edge setting', 'Contain discipline', 'Pass-rush upside'],
+  OLB:  ['Coverage versatility', 'Rush upside', 'Motor and effort'],
+  K:    ['Leg strength', 'Accuracy under pressure', 'Kickoff distance'],
+};
+
+const DEFAULT_WEAKNESSES: Record<string, string[]> = {
+  QB:   ['Consistency under pressure', 'Decision speed vs blitz'],
+  RB:   ['Fumble security', 'Third-down receiving'],
+  WR:   ['Contested catch rate', 'Physicality at the catch point'],
+  TE:   ['Inline blocking consistency', 'Route depth vs man coverage'],
+  OT:   ['Lateral quickness on stunts', 'Finishing through the whistle'],
+  OG:   ['Recovery after initial engagement', 'Awareness in full-zone combos'],
+  C:    ['Handling A-gap stunts', 'NFL transition at the line'],
+  EDGE: ['Coverage reps in space', 'Setting the edge vs power run'],
+  DT:   ['Conditioning over 4 quarters', 'Lateral range on cutbacks'],
+  LB:   ['Man coverage on RBs', 'Press alignment in nickel packages'],
+  CB:   ['Recovery speed after press', 'Zone awareness at depth'],
+  S:    ['Man coverage footwork', 'Late rotation fills'],
+  DE:   ['Pass-rush counter moves', 'Two-gap 3-4 alignment'],
+  OLB:  ['Run fill discipline', 'Inside leverage vs TEs'],
+  K:    ['Consistency in bad weather', 'Onside kick accuracy'],
+};
+
+function getDefaultStrengths(position: string): string[] {
+  return DEFAULT_STRENGTHS[position] ?? ['Athleticism', 'Football IQ', 'Work ethic'];
+}
+
+function getDefaultWeaknesses(position: string): string[] {
+  return DEFAULT_WEAKNESSES[position] ?? ['Consistency', 'NFL transition'];
+}
+
 const POSITION_COLORS: Record<string, { bg: string; text: string }> = {
   QB:   { bg: 'rgba(185,28,28,0.2)',  text: '#fca5a5' },
   RB:   { bg: 'rgba(29,78,216,0.2)',  text: '#93c5fd' },
@@ -162,13 +206,13 @@ export function ProspectCard({ prospect }: Props) {
       <div className="grid grid-cols-2 gap-2">
         <div>
           <div className="text-xs font-semibold text-green-400/70 mb-1">Strengths</div>
-          {prospect.strengths.slice(0, 3).map(s => (
+          {(prospect.strengths.length > 0 ? prospect.strengths : getDefaultStrengths(prospect.position)).slice(0, 3).map(s => (
             <div key={s} className="text-xs text-white/40">+ {s}</div>
           ))}
         </div>
         <div>
           <div className="text-xs font-semibold text-red-400/70 mb-1">Weaknesses</div>
-          {prospect.weaknesses.slice(0, 2).map(w => (
+          {(prospect.weaknesses.length > 0 ? prospect.weaknesses : getDefaultWeaknesses(prospect.position)).slice(0, 2).map(w => (
             <div key={w} className="text-xs text-white/40">− {w}</div>
           ))}
         </div>

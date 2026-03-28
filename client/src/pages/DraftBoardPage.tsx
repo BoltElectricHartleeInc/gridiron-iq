@@ -199,7 +199,7 @@ function ProspectCard({ prospect, fullProspect, isUserTurn, onDraft, onClose }: 
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(4,9,17,0.82)', display: 'grid', placeItems: 'center', padding: 20 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(4,9,17,0.82)', display: 'grid', placeItems: 'center', padding: 20 }}
       onClick={onClose}
     >
       <div
@@ -280,16 +280,24 @@ function ProspectCard({ prospect, fullProspect, isUserTurn, onDraft, onClose }: 
                   </div>
                 )}
                 {/* Strengths / Weaknesses */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 9, color: T.green, fontWeight: 800, letterSpacing: '.12em', marginBottom: 6 }}>STRENGTHS</div>
-                    {fullProspect.strengths.map(s => <div key={s} style={{ fontSize: 11, color: T.txtSub, marginBottom: 3 }}>✓ {s}</div>)}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 9, color: T.red, fontWeight: 800, letterSpacing: '.12em', marginBottom: 6 }}>CONCERNS</div>
-                    {fullProspect.weaknesses.map(w => <div key={w} style={{ fontSize: 11, color: T.txtSub, marginBottom: 3 }}>⚠ {w}</div>)}
-                  </div>
-                </div>
+                {(() => {
+                  const posDefStr: Record<string, string[]> = { QB: ['Pre-snap processing','Arm talent','Pocket mobility'], RB: ['Vision between tackles','Contact balance','Pass protection'], WR: ['Route precision','Separation quickness','Ball tracking'], TE: ['Blocking versatility','Seam stretching','Red zone target'], OT: ['Pass-set footwork','Anchor strength','Length and athleticism'], OG: ['Drive block power','Pull efficiency','Gap sealing'], C: ['Line communication','Shotgun snapping','Interior leverage'], EDGE: ['Pass-rush repertoire','Motor off the snap','Bend around corner'], DT: ['Gap penetration','Two-gap control','Interior push'], LB: ['Sideline-to-sideline range','Blitz timing','Instincts in zone'], CB: ['Press technique','Ball production','Hip fluidity'], S: ['Zone recognition','Run-support angles','Range as centerfielder'] };
+                  const posDefWk: Record<string, string[]> = { QB: ['Consistency under pressure','Decision speed vs blitz'], RB: ['Fumble security','Third-down receiving'], WR: ['Contested catch rate','Physicality at the catch point'], TE: ['Inline blocking consistency','Route depth vs man coverage'], OT: ['Lateral quickness on stunts','Finishing through the whistle'], OG: ['Recovery after initial engagement','Full-zone combo awareness'], C: ['Handling A-gap stunts','NFL transition at the line'], EDGE: ['Coverage reps in space','Setting the edge vs power run'], DT: ['Conditioning over 4 quarters','Lateral range on cutbacks'], LB: ['Man coverage on RBs','Press alignment in nickel'], CB: ['Recovery speed after press','Zone awareness at depth'], S: ['Man coverage footwork','Late rotation fills'] };
+                  const strengths = fullProspect.strengths.length > 0 ? fullProspect.strengths : (posDefStr[fullProspect.position] ?? ['Athleticism','Football IQ','Effort']);
+                  const weaknesses = fullProspect.weaknesses.length > 0 ? fullProspect.weaknesses : (posDefWk[fullProspect.position] ?? ['Consistency','NFL transition']);
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: T.green, fontWeight: 800, letterSpacing: '.12em', marginBottom: 6 }}>STRENGTHS</div>
+                        {strengths.slice(0, 3).map(s => <div key={s} style={{ fontSize: 11, color: T.txtSub, marginBottom: 3 }}>✓ {s}</div>)}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: T.red, fontWeight: 800, letterSpacing: '.12em', marginBottom: 6 }}>CONCERNS</div>
+                        {weaknesses.slice(0, 3).map(w => <div key={w} style={{ fontSize: 11, color: T.txtSub, marginBottom: 3 }}>⚠ {w}</div>)}
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             ) : (
               <div style={{ color: T.txtSub, fontSize: 12, padding: '16px 0' }}>No extended data available for this prospect.</div>
@@ -345,7 +353,7 @@ function defaultProspectCard(prospect: BigBoardProspect, close: () => void): Rea
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 80,
+        zIndex: 200,
         background: 'rgba(4, 9, 17, 0.7)',
         display: 'grid',
         placeItems: 'center',
@@ -923,7 +931,6 @@ function DraftBoardLayout({
           >
             Skip to My Pick →
           </button>
-          {pickClock}
         </div>
       </header>
 

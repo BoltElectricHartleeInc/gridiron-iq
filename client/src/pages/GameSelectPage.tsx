@@ -509,7 +509,7 @@ export function GameSelectPage() {
             )}
           </AnimatePresence>
 
-          {/* ── KICKOFF button ── */}
+          {/* ── KICKOFF button (inline at bottom of content) ── */}
           <button
             onClick={() => canPlay && home && away && navigate(`/game/play?home=${home.id}&away=${away.id}&league=${league}`)}
             disabled={!canPlay}
@@ -563,6 +563,54 @@ export function GameSelectPage() {
 
         </div>
       </div>
+
+      {/* ── Sticky KICKOFF bar — appears at top of viewport once both teams are selected ── */}
+      {canPlay && home && away && (
+        <div style={{
+          position: 'fixed',
+          top: 56, // below the AppShell nav bar
+          left: 0,
+          right: 0,
+          zIndex: 200,
+          display: 'flex',
+          justifyContent: 'center',
+          padding: '10px 24px',
+          background: 'rgba(8,10,18,0.92)',
+          backdropFilter: 'blur(12px)',
+          borderBottom: `1px solid ${C.green}30`,
+        }}>
+          <button
+            onClick={() => navigate(`/game/play?home=${home.id}&away=${away.id}&league=${league}`)}
+            style={{
+              maxWidth: 820,
+              width: '100%',
+              padding: '14px 24px',
+              borderRadius: 12,
+              border: `1px solid ${C.green}50`,
+              background: `linear-gradient(135deg, #0d3d12, #1a6e20)`,
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: 16, fontWeight: 900,
+              fontFamily: 'Impact, Arial Narrow, sans-serif',
+              letterSpacing: '.08em',
+              boxShadow: `0 0 32px ${C.green}28`,
+              transition: 'all 200ms ease',
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.transform = 'translateY(-1px)';
+              el.style.boxShadow = `0 0 48px ${C.green}40`;
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.transform = '';
+              el.style.boxShadow = `0 0 32px ${C.green}28`;
+            }}
+          >
+            🏈 KICKOFF → {home.abbreviation} vs {away.abbreviation}
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }
