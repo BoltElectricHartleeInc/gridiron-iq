@@ -135,11 +135,21 @@ function getAIPickForTeam(
   needsWeight: number,
   positionWeight: number,
   draftCraziness: number = 20,
+  pickOverall: number = 1,
 ): Prospect {
   const sorted = [...available].sort((a, b) => b.grade - a.grade);
   if (sorted.length === 0) return available[0]; // fallback
 
-  // Score each prospect based on settings
+  // In real NFL drafts, round 1 is almost purely BPA — teams take value over need.
+  // Needs matter more as rounds progress (teams filling depth/specific holes).
+  // Scale: R1 (picks 1-32) => needs weight capped at 20%; by pick 96 (R3) => full weight.
+  const roundNeedsScale = Math.min(1, Math.max(0.2, (pickOverall - 1) / 80));
+  const effectiveNeedsWeight = needsWeight * roundNeedsScale;
+
+  // Expected grade at this pick based on realistic draft curve.
+  // Used to identify when a player is elite relative to draft position.
+  const expectedGradeAtPick = Math.max(55, 99 - pickOverall * 0.145);
+
   const scored = sorted.map(prospect => {
     // BPA score (normalized 0-100)
     const bpaScore = prospect.grade;
@@ -151,14 +161,20 @@ function getAIPickForTeam(
     // Position value score
     const posScore = POSITION_VALUE[prospect.position] ?? 50;
 
-    // Blend: needsWeight controls BPA vs needs, positionWeight adds positional scarcity
-    const nw = needsWeight / 100;  // 0 = pure BPA, 1 = pure needs
+    // Blend: effectiveNeedsWeight is round-scaled so R1 BPA dominates
+    const nw = effectiveNeedsWeight / 100;
     const pw = positionWeight / 100;
 
     const baseScore = bpaScore * (1 - nw) + needScore * nw;
-    const finalScore = baseScore * (1 - pw * 0.3) + posScore * (pw * 0.3);
+    const blendedScore = baseScore * (1 - pw * 0.3) + posScore * (pw * 0.3);
 
-    return { prospect, score: finalScore };
+    // Value premium: if this prospect is significantly above expected grade for this pick,
+    // add a strong bonus so elite players NEVER fall past their talent tier.
+    // A top-10 talent graded 95+ still available at pick 25 gets a massive premium.
+    const gradeOverExpected = prospect.grade - expectedGradeAtPick;
+    const valuePremium = gradeOverExpected > 0 ? gradeOverExpected * 2 : 0;
+
+    return { prospect, score: blendedScore + valuePremium };
   });
 
   // Apply draft style modifications
@@ -181,8 +197,12 @@ function getAIPickForTeam(
   }
 
   scored.sort((a, b) => b.score - a.score);
-  // Craziness: randomly pick from top N candidates (higher craziness = wilder picks)
-  const poolSize = Math.max(1, Math.round(1 + (draftCraziness / 100) * 4)); // 1–5 candidates
+
+  // Pool size: R1 teams almost never make wild picks (pool = 1-2).
+  // Craziness has much less effect in early rounds; opens up in rounds 3+.
+  const roundCrazyScale = Math.min(1, pickOverall / 64); // near-0 in R1, full by pick 64
+  const effectiveCraziness = draftCraziness * roundCrazyScale;
+  const poolSize = Math.max(1, Math.round(1 + (effectiveCraziness / 100) * 4)); // 1–5 candidates
   const pool = scored.slice(0, Math.min(poolSize, scored.length));
   return pool[Math.floor(Math.random() * pool.length)].prospect;
 }
@@ -417,7 +437,7 @@ export const useDraftStore = create<DraftStore>()(
         const team = NFL_TEAMS.find(t => t.id === pick.teamId);
         if (!team) return;
 
-        const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight, draftCraziness);
+        const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight, draftCraziness, pick.overall);
 
         const updatedPicks = [...session.picks];
         updatedPicks[session.currentPickIndex] = { ...pick, prospect: aiPick };
@@ -453,7 +473,7 @@ export const useDraftStore = create<DraftStore>()(
           const team = NFL_TEAMS.find(t => t.id === pick.teamId);
           if (!team) break;
 
-          const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight, draftCraziness);
+          const aiPick = getAIPickForTeam(team, availableProspects, team.draftStyle, needsWeight, positionWeight, draftCraziness, pick.overall);
           const updatedPicks = [...session.picks];
           updatedPicks[session.currentPickIndex] = { ...pick, prospect: aiPick };
 
