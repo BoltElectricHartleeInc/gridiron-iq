@@ -205,9 +205,124 @@ const COLORS = {
 
 // ─── Main controller ──────────────────────────────────────────────────────────
 
+// ─── Gamepad support ──────────────────────────────────────────────────────────
+//
+// Standard Gamepad layout (works with any Bluetooth controller — Xbox, PS,
+// Nintendo, and snap-on phone controllers like abxylute):
+//   axes[0/1]   = left stick X/Y
+//   axes[2/3]   = right stick X/Y
+//   buttons[0]  = A / Cross     → Snap (pre-snap) or throw WR1 (live)
+//   buttons[1]  = B / Circle    → Throw WR2 / throw away
+//   buttons[2]  = X / Square    → Throw WR3 / juke
+//   buttons[3]  = Y / Triangle  → Throw WR4 / spin
+//   buttons[4]  = LB / L1       → Juke
+//   buttons[5]  = RB / R1       → Spin
+//   buttons[6]  = LT / L2       → Stiff arm
+//   buttons[7]  = RT / R2       → Sprint (hold)
+//   buttons[9]  = Start/+       → Snap
+//   buttons[12-15]              = D-pad (movement fallback)
+
+const GPAD_DEAD = 0.15; // analog dead zone
+
+function useGamepadInput(setGamepadConnected: (v: boolean) => void) {
+  const rafRef  = useRef<number | null>(null);
+  const prevBtn = useRef<boolean[]>([]);
+
+  useEffect(() => {
+    const onConnect    = () => setGamepadConnected(true);
+    const onDisconnect = () => {
+      // Reset movement when controller disconnects
+      virtualInput.dx = 0;
+      virtualInput.dy = 0;
+      virtualInput.sprint = false;
+      setGamepadConnected(false);
+    };
+
+    window.addEventListener('gamepadconnected',    onConnect);
+    window.addEventListener('gamepaddisconnected', onDisconnect);
+
+    const applyDead = (v: number) => Math.abs(v) < GPAD_DEAD ? 0 : v;
+
+    const justPressed = (idx: number, btns: readonly GamepadButton[]): boolean => {
+      const now  = btns[idx]?.pressed ?? false;
+      const prev = prevBtn.current[idx] ?? false;
+      prevBtn.current[idx] = now;
+      return now && !prev;
+    };
+
+    const poll = () => {
+      rafRef.current = requestAnimationFrame(poll);
+      const gamepads = navigator.getGamepads();
+      const gp = gamepads[0]; // use first connected controller
+      if (!gp) return;
+
+      // ── Analog stick → movement ─────────────────────────────────────────
+      const lx = applyDead(gp.axes[0] ?? 0);
+      const ly = applyDead(gp.axes[1] ?? 0);
+
+      // D-pad fallback (buttons 12-15)
+      const dUp    = gp.buttons[12]?.pressed;
+      const dDown  = gp.buttons[13]?.pressed;
+      const dLeft  = gp.buttons[14]?.pressed;
+      const dRight = gp.buttons[15]?.pressed;
+
+      virtualInput.dx = lx !== 0 ? lx : dRight ? 1 : dLeft ? -0.7 : 0;
+      virtualInput.dy = ly !== 0 ? ly : dDown  ? 1 : dUp   ? -1   : 0;
+
+      // ── RT hold → sprint ────────────────────────────────────────────────
+      virtualInput.sprint = (gp.buttons[7]?.value ?? 0) > 0.25;
+
+      // ── One-shot buttons ─────────────────────────────────────────────────
+      // Snap: A (0) or Start (9)
+      if (justPressed(0, gp.buttons) || justPressed(9, gp.buttons)) {
+        virtualInput._snap = true;
+        virtualInput._throw[0] = true;   // in LIVE_PLAY this throws to WR1
+      }
+      // B → WR2 / throw away
+      if (justPressed(1, gp.buttons)) {
+        virtualInput._throw[1]  = true;
+        virtualInput._throwAway = true;
+      }
+      // X → WR3 / juke
+      if (justPressed(2, gp.buttons)) {
+        virtualInput._throw[2] = true;
+        virtualInput._juke     = true;
+      }
+      // Y → WR4 / spin
+      if (justPressed(3, gp.buttons)) {
+        virtualInput._throw[3] = true;
+        virtualInput._spin     = true;
+      }
+      // LB → juke
+      if (justPressed(4, gp.buttons)) virtualInput._juke     = true;
+      // RB → spin
+      if (justPressed(5, gp.buttons)) virtualInput._spin     = true;
+      // LT → stiff arm
+      if ((gp.buttons[6]?.value ?? 0) > 0.25 && !prevBtn.current[6]) {
+        virtualInput._stiffArm = true;
+      }
+      prevBtn.current[6] = (gp.buttons[6]?.value ?? 0) > 0.25;
+
+      // Select/back (8) → punt on 4th
+      if (justPressed(8, gp.buttons)) virtualInput._punt = true;
+    };
+
+    rafRef.current = requestAnimationFrame(poll);
+    return () => {
+      window.removeEventListener('gamepadconnected',    onConnect);
+      window.removeEventListener('gamepaddisconnected', onDisconnect);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [setGamepadConnected]);
+}
+
 export function GameController() {
   const [phaseInfo, setPhaseInfo] = useState<PhaseInfo>({ phase: PlayPhase.FORMATION, down: 1, distance: 10, yardLine: 25 });
   const [sprintOn, setSprintOn] = useState(false);
+  const [gamepadConnected, setGamepadConnected] = useState(false);
+
+  // Physical Bluetooth controller support (Gamepad API)
+  useGamepadInput(setGamepadConnected);
 
   // Listen for phase changes emitted by the game
   useEffect(() => {
@@ -258,6 +373,22 @@ export function GameController() {
         zIndex: 30,
       }}
     >
+      {/* Gamepad connected badge */}
+      {gamepadConnected && (
+        <div style={{
+          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(22,163,74,0.25)', border: '1px solid rgba(22,163,74,0.55)',
+          borderRadius: 20, padding: '4px 14px',
+          color: '#4ade80', fontSize: 12, fontWeight: 700, fontFamily: 'system-ui',
+          letterSpacing: '0.04em', pointerEvents: 'none',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span style={{ fontSize: 15 }}>🎮</span> CONTROLLER CONNECTED
+        </div>
+      )}
+
+      {/* When a physical controller is active, hide touch controls to reduce clutter */}
+      {!gamepadConnected && (
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
 
         {/* ── LEFT: Joystick ── */}
@@ -329,6 +460,7 @@ export function GameController() {
         </div>
 
       </div>
+      )}
     </div>
   );
 }

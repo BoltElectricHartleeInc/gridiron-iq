@@ -146,11 +146,24 @@ function getAIPickForTeam(
   const roundNeedsScale = Math.min(1, Math.max(0.2, (pickOverall - 1) / 80));
   const effectiveNeedsWeight = needsWeight * roundNeedsScale;
 
-  // Expected grade at this pick based on realistic draft curve.
-  // Used to identify when a player is elite relative to draft position.
-  const expectedGradeAtPick = Math.max(55, 99 - pickOverall * 0.145);
+  // ── Realistic draft curve ────────────────────────────────────────────────────
+  // Expected grade at this pick: pick 1 = ~97, pick 32 = ~83, pick 64 = ~70, pick 100+ = 55 floor.
+  // Previous formula (99 - pick*0.145) gave pick-32 expected=94, so a grade-90 player had
+  // NO value premium and could be beaten by a lower-graded "needed" player. Fixed.
+  const expectedGradeAtPick = Math.max(55, 97 - (pickOverall - 1) * 0.43);
 
-  const scored = sorted.map(prospect => {
+  // ── Hard tier floor ──────────────────────────────────────────────────────────
+  // AI teams never draft players significantly below their pick tier.
+  // In real drafts a team would NEVER take a 3rd-round talent with a 1st-round pick
+  // when elite players are still on the board.
+  // Floor: pick 1 ≈ 98, pick 32 ≈ 82, pick 64 ≈ 66, pick 96+ uncapped.
+  const tierFloor = Math.max(40, 99 - pickOverall * 0.52);
+  const tierEligible = sorted.filter(p => p.grade >= tierFloor);
+  // Only apply the floor if there are still enough prospects in-tier.
+  // If the board has thinned out, fall back to all available.
+  const scoringBase = tierEligible.length >= 3 ? tierEligible : sorted;
+
+  const scored = scoringBase.map(prospect => {
     // BPA score (normalized 0-100)
     const bpaScore = prospect.grade;
 
@@ -171,8 +184,9 @@ function getAIPickForTeam(
     // Value premium: if this prospect is significantly above expected grade for this pick,
     // add a strong bonus so elite players NEVER fall past their talent tier.
     // A top-10 talent graded 95+ still available at pick 25 gets a massive premium.
+    // Premium multiplier = 3 (was 2) so elite grade advantage can't be overridden by need.
     const gradeOverExpected = prospect.grade - expectedGradeAtPick;
-    const valuePremium = gradeOverExpected > 0 ? gradeOverExpected * 2 : 0;
+    const valuePremium = gradeOverExpected > 0 ? gradeOverExpected * 3 : 0;
 
     return { prospect, score: blendedScore + valuePremium };
   });
