@@ -673,7 +673,7 @@ export function TeamSelectPage(props: TeamSelectPageProps) {
       props.onStart(team);
     } else {
       startDraft(team.abbreviation.toLowerCase());
-      navigate('/draft/board');
+      navigate('/draft/pregame');
     }
   };
 
