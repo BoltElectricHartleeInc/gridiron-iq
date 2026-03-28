@@ -1,365 +1,413 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { AppShell, C, Badge, ModCard, SectionHead, GLOBAL_CSS } from '../components/AppShell';
 
-const S = {
-  bg:       '#050508',
-  surface:  '#0a0a14',
-  elevated: '#0f0f1e',
-  border:   'rgba(255,255,255,0.06)',
-  borderHi: 'rgba(255,255,255,0.12)',
-  txt:      '#e2e8f0',
-  txtSub:   '#8890a8',
-  txtMuted: '#3a3d52',
-  gold:     '#c49a1a',
-};
+// ─── Mode definitions ─────────────────────────────────────────────────────────
 
-interface ModeCard {
+interface ModeConfig {
   key: string;
   title: string;
   subtitle: string;
   desc: string;
   icon: string;
-  color: string;
+  accent: string;
   tag: string;
   route: string;
-  wide?: boolean;
   badge?: string;
+  badgeColor?: string;
+  wide?: boolean;
+  featured?: boolean;
 }
 
-const SECTIONS: { label: string; icon: string; modes: ModeCard[] }[] = [
+const MAIN_GAMES: ModeConfig[] = [
   {
-    label: 'ARCADE FOOTBALL',
-    icon: '🏈',
-    modes: [
-      {
-        key: 'exhibition',
-        title: 'Exhibition',
-        subtitle: 'Quick Game',
-        desc: 'Pick any two NFL or NCAA teams and kick off immediately. No setup, pure football.',
-        icon: '⚡',
-        color: '#3b7dd8',
-        tag: 'QUICK PLAY',
-        route: '/game/select',
-      },
-      {
-        key: 'historical',
-        title: 'Historical Eras',
-        subtitle: 'Legends Mode',
-        desc: "'85 Bears. 2007 Pats. Legion of Boom. 12 legendary rosters with authentic ratings.",
-        icon: '🏛️',
-        color: '#c49a1a',
-        tag: '12 LEGENDS',
-        route: '/game/historical',
-        badge: 'NEW',
-      },
-    ],
+    key: 'exhibition',
+    title: 'Exhibition',
+    subtitle: 'Quick Game',
+    desc: 'Pick any two NFL or NCAA teams and kick off immediately. No setup, pure football.',
+    icon: '⚡',
+    accent: C.blueBright,
+    tag: 'QUICK PLAY',
+    route: '/game/select',
   },
   {
-    label: 'CAREER & FRANCHISE',
-    icon: '🏟️',
-    modes: [
-      {
-        key: 'career',
-        title: 'Road to Glory',
-        subtitle: 'Career Mode',
-        desc: 'Create a player. Build from high school through the NFL Draft and into a pro career. Every snap of your journey matters.',
-        icon: '⭐',
-        color: '#a855f7',
-        tag: 'CAREER MODE',
-        route: '/career',
-        wide: true,
-        badge: 'NEW',
-      },
-      {
-        key: 'franchise',
-        title: 'Franchise Mode',
-        subtitle: 'Dynasty Builder',
-        desc: 'Roster management, salary cap ($255M), free agency, contract negotiations. Build a multi-year dynasty.',
-        icon: '🏟️',
-        color: '#f59e0b',
-        tag: 'MULTI-YEAR',
-        route: '/game/franchise',
-      },
-      {
-        key: 'rebuild',
-        title: 'Rebuild Challenge',
-        subtitle: 'From the Bottom',
-        desc: 'Worst team. 10 years. The Browns, a complete teardown, or a window-closing contender. Community leaderboard.',
-        icon: '📉',
-        color: '#ef4444',
-        tag: 'CHALLENGE',
-        route: '/rebuild',
-        badge: 'NEW',
-      },
-    ],
-  },
-  {
-    label: 'SEASON & PLAYOFFS',
+    key: 'season',
+    title: 'Season Mode',
+    subtitle: '18-Week NFL Season',
+    desc: 'Simulate or play every week. Full division standings. Chase a playoff spot.',
     icon: '📅',
-    modes: [
-      {
-        key: 'season',
-        title: 'Season Mode',
-        subtitle: '18-Week NFL Season',
-        desc: 'Simulate or play every week of the NFL season. Full division standings. Chase a playoff spot.',
-        icon: '📅',
-        color: '#22c55e',
-        tag: '18 WEEKS',
-        route: '/game/season',
-      },
-      {
-        key: 'playoffs',
-        title: 'Playoff Mode',
-        subtitle: '14-Team Bracket',
-        desc: 'Seed the bracket your way. Play every round from Wild Card through the Super Bowl.',
-        icon: '🏆',
-        color: '#f97316',
-        tag: 'BRACKET',
-        route: '/game/playoffs',
-      },
-    ],
+    accent: C.green,
+    tag: '18 WEEKS',
+    route: '/game/season',
   },
   {
-    label: 'COLLEGE FOOTBALL',
-    icon: '🎓',
-    modes: [
-      {
-        key: 'recruiting',
-        title: 'Recruiting',
-        subtitle: 'Build Your Class',
-        desc: 'Call 100 real recruits. Make your pitch. Watch them respond in real time — AI-powered conversations with every prospect. Transfer portal. Signing Day.',
-        icon: '📞',
-        color: '#06b6d4',
-        tag: 'AI CONVERSATIONS',
-        route: '/recruiting',
-        wide: true,
-        badge: 'NEW',
-      },
-    ],
-  },
-  {
-    label: 'SCOUTING & DRAFT',
-    icon: '📋',
-    modes: [
-      {
-        key: 'draft',
-        title: 'Mock Draft Simulator',
-        subtitle: 'War Room',
-        desc: '480 real 2026 prospects. 32 franchises. AI opponents. Live trade engine with hectic pre-draft war room.',
-        icon: '📋',
-        color: '#3b7dd8',
-        tag: '2026 CLASS',
-        route: '/draft/select',
-        wide: true,
-      },
-      {
-        key: 'combine',
-        title: 'NFL Combine',
-        subtitle: '5 Mini-Games',
-        desc: '40-yard dash, bench press, Wonderlic, route running, QB accuracy drill. One combined grade.',
-        icon: '🏃',
-        color: '#84cc16',
-        tag: '5 EVENTS',
-        route: '/combine',
-        badge: 'NEW',
-      },
-      {
-        key: 'scouting',
-        title: 'Scouting Hub',
-        subtitle: 'Big Board',
-        desc: 'Claude-powered deep dives on every prospect. 2025–2028 classes. Watchlist builder.',
-        icon: '🔭',
-        color: '#7c3aed',
-        tag: 'CLAUDE AI',
-        route: '/scouting',
-      },
-      {
-        key: 'analytics',
-        title: 'Analytics Dashboard',
-        subtitle: 'Advanced Stats',
-        desc: 'EPA, Win Probability, draft analytics, combine metrics. The analytics layer Madden never built.',
-        icon: '📊',
-        color: '#0ea5e9',
-        tag: 'ANALYTICS',
-        route: '/analytics',
-        badge: 'NEW',
-      },
-    ],
-  },
-  {
-    label: 'FANTASY',
-    icon: '🏅',
-    modes: [
-      {
-        key: 'fantasy',
-        title: 'Fantasy League',
-        subtitle: 'Season-Long & DFS',
-        desc: 'Real NFL players. Snake draft. Live scoring. Full season-long fantasy league plus DFS contests.',
-        icon: '🏅',
-        color: '#c49a1a',
-        tag: 'LIVE',
-        route: '/fantasy',
-      },
-    ],
+    key: 'franchise',
+    title: 'Franchise Mode',
+    subtitle: 'Dynasty Builder',
+    desc: 'Roster management, salary cap ($255M), free agency, contract negotiations. Build a multi-year dynasty.',
+    icon: '🏟️',
+    accent: C.amber,
+    tag: 'MULTI-YEAR',
+    route: '/game/franchise',
   },
 ];
+
+const DRAFT_TOOLS: ModeConfig[] = [
+  {
+    key: 'draft',
+    title: 'Mock Draft Simulator',
+    subtitle: 'War Room',
+    desc: '480 real 2026 prospects. 32 franchises. AI opponents. Live trade engine with pre-draft war room pressure.',
+    icon: '📋',
+    accent: C.blueBright,
+    tag: '2026 CLASS',
+    route: '/draft/select',
+    wide: true,
+    featured: true,
+  },
+  {
+    key: 'scouting',
+    title: 'Scouting Hub',
+    subtitle: 'Big Board',
+    desc: 'Claude AI deep dives on every prospect. 2025–2028 classes. Watchlist builder.',
+    icon: '🔭',
+    accent: C.purple,
+    tag: 'CLAUDE AI',
+    route: '/scouting',
+  },
+  {
+    key: 'analytics',
+    title: 'Analytics Dashboard',
+    subtitle: 'Advanced Stats',
+    desc: 'EPA, Win Probability, draft analytics, combine metrics. The analytics layer Madden never built.',
+    icon: '📊',
+    accent: '#0EA5E9',
+    tag: 'ANALYTICS',
+    route: '/analytics',
+    badge: 'NEW',
+    badgeColor: C.green,
+  },
+];
+
+const MORE_MODES: ModeConfig[] = [
+  {
+    key: 'career',
+    title: 'Road to Glory',
+    subtitle: 'Career Mode',
+    desc: 'Create a player. Build from high school through the NFL Draft and into a pro career.',
+    icon: '⭐',
+    accent: C.purple,
+    tag: 'CAREER MODE',
+    route: '/career',
+    badge: 'NEW',
+    badgeColor: C.purple,
+  },
+  {
+    key: 'rebuild',
+    title: 'Rebuild Challenge',
+    subtitle: 'From the Bottom',
+    desc: 'Worst team. 10 years. Browns, a complete teardown, or a window-closing contender.',
+    icon: '📉',
+    accent: C.red,
+    tag: 'CHALLENGE',
+    route: '/rebuild',
+    badge: 'NEW',
+    badgeColor: C.red,
+  },
+  {
+    key: 'historical',
+    title: 'Historical Eras',
+    subtitle: 'Legends Mode',
+    desc: "'85 Bears. 2007 Pats. Legion of Boom. 12 legendary rosters with authentic ratings.",
+    icon: '🏛️',
+    accent: C.gold,
+    tag: '12 LEGENDS',
+    route: '/game/historical',
+    badge: 'NEW',
+    badgeColor: C.gold,
+  },
+  {
+    key: 'playoffs',
+    title: 'Playoff Mode',
+    subtitle: '14-Team Bracket',
+    desc: 'Seed the bracket your way. Play every round from Wild Card through the Super Bowl.',
+    icon: '🏆',
+    accent: '#F97316',
+    tag: 'BRACKET',
+    route: '/game/playoffs',
+  },
+  {
+    key: 'recruiting',
+    title: 'Recruiting',
+    subtitle: 'Build Your Class',
+    desc: 'Call 100 real recruits. Make your pitch. AI-powered conversations with every prospect. Transfer portal.',
+    icon: '📞',
+    accent: '#06B6D4',
+    tag: 'AI CONVERSATIONS',
+    route: '/recruiting',
+    badge: 'NEW',
+    badgeColor: '#06B6D4',
+    wide: true,
+  },
+  {
+    key: 'combine',
+    title: 'NFL Combine',
+    subtitle: '5 Mini-Games',
+    desc: '40-yard dash, bench press, Wonderlic, route running, QB accuracy drill. One combined grade.',
+    icon: '🏃',
+    accent: '#84CC16',
+    tag: '5 EVENTS',
+    route: '/combine',
+    badge: 'NEW',
+    badgeColor: '#84CC16',
+  },
+  {
+    key: 'fantasy',
+    title: 'Fantasy League',
+    subtitle: 'Season-Long & DFS',
+    desc: 'Real NFL players. Snake draft. Live scoring. Full season-long fantasy league plus DFS contests.',
+    icon: '🏅',
+    accent: C.gold,
+    tag: 'LIVE',
+    route: '/fantasy',
+  },
+];
+
+// ─── Card grid helper ──────────────────────────────────────────────────────────
+
+function ModeGrid({ modes, cols = 3 }: { modes: ModeConfig[]; cols?: number }) {
+  const navigate = useNavigate();
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+      gap: 14,
+    }}>
+      {modes.map(m => (
+        <ModCard
+          key={m.key}
+          title={m.title}
+          tag={m.subtitle}
+          desc={m.desc}
+          accent={m.accent}
+          badge={m.badge}
+          badgeColor={m.badgeColor}
+          onClick={() => navigate(m.route)}
+          style={m.wide ? { gridColumn: 'span 2' } : undefined}
+        >
+          {/* Icon + tag row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 26 }}>{m.icon}</span>
+            <span style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '.12em',
+              textTransform: 'uppercase', color: m.accent,
+              background: `color-mix(in srgb, ${m.accent} 10%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${m.accent} 25%, transparent)`,
+              borderRadius: 6, padding: '3px 8px',
+            }}>
+              {m.tag}
+            </span>
+          </div>
+        </ModCard>
+      ))}
+    </div>
+  );
+}
+
+// ─── Featured hero card for main games ────────────────────────────────────────
+
+function FeaturedCard({ mode }: { mode: ModeConfig }) {
+  const navigate = useNavigate();
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      onClick={() => navigate(mode.route)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        background: C.surface,
+        border: `1px solid ${hovered ? mode.accent : C.border}`,
+        borderRadius: 16,
+        padding: '28px 28px 24px',
+        cursor: 'pointer',
+        transition: 'transform 160ms, border-color 160ms, box-shadow 160ms',
+        transform: hovered ? 'translateY(-3px)' : '',
+        boxShadow: hovered ? `0 0 32px -6px ${mode.accent}60` : '',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        minHeight: 170,
+      }}
+    >
+      {/* Gradient overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${mode.accent}18 0%, transparent 60%)`, pointerEvents: 'none' }} />
+      {/* Glow blob */}
+      <div style={{ position: 'absolute', top: -30, right: -30, width: 160, height: 160, borderRadius: '50%', background: `${mode.accent}14`, filter: 'blur(50px)', pointerEvents: 'none' }} />
+      {/* Bottom bar */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${mode.accent}, transparent)` }} />
+
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <span style={{ fontSize: 34 }}>{mode.icon}</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {mode.badge && (
+            <Badge color={mode.badgeColor ?? C.green}>{mode.badge}</Badge>
+          )}
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase',
+            color: mode.accent,
+            background: `color-mix(in srgb, ${mode.accent} 10%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${mode.accent} 25%, transparent)`,
+            borderRadius: 6, padding: '3px 8px',
+          }}>
+            {mode.tag}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: C.txtMuted, marginBottom: 4 }}>
+          {mode.subtitle}
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.txt, letterSpacing: '-.02em', marginBottom: 6 }}>
+          {mode.title}
+        </div>
+        <div style={{ fontSize: 12, color: C.txtSub, lineHeight: 1.6 }}>
+          {mode.desc}
+        </div>
+      </div>
+
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+        <div style={{ height: 1, flex: 1, background: `linear-gradient(to right, ${mode.accent}55, transparent)` }} />
+        <span style={{ fontSize: 14, color: mode.accent }}>→</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function GameModesPage() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ minHeight: '100vh', background: S.bg, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <>
+      <style>{GLOBAL_CSS}</style>
+      <div style={{ minHeight: '100vh', background: C.bg, color: C.txt, fontFamily: C.font }}>
 
-      {/* Nav */}
-      <div style={{
-        display: 'flex', alignItems: 'center', padding: '0 24px', height: 50,
-        background: S.surface, borderBottom: `1px solid ${S.border}`,
-        position: 'sticky', top: 0, zIndex: 40,
-      }}>
-        <button onClick={() => navigate('/')} style={{ fontSize: 12, color: S.txtSub, background: 'none', border: 'none', cursor: 'pointer', marginRight: 16 }}>
-          ← Back
-        </button>
-        <span style={{ fontSize: 15, fontWeight: 800, color: S.txt, letterSpacing: '-0.02em' }}>
-          Gridiron<span style={{ color: S.gold }}>IQ</span>
-        </span>
-        <span style={{ marginLeft: 10, fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: S.txtMuted }}>
-          · All Modes
-        </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          {[
-            { label: 'Draft', route: '/draft/select' },
-            { label: 'Recruiting', route: '/recruiting' },
-            { label: 'Analytics', route: '/analytics' },
-            { label: 'Fantasy', route: '/fantasy' },
-          ].map(l => (
-            <button
-              key={l.route}
-              onClick={() => navigate(l.route)}
-              style={{ fontSize: 11, color: S.txtSub, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 4 }}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 1060, margin: '0 auto', padding: '40px 24px 60px' }}>
-
-        {/* Hero */}
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          style={{ marginBottom: 44 }}
-        >
-          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: S.txtMuted, marginBottom: 8 }}>
-            GridironIQ · Front Office Platform
-          </div>
-          <h1 style={{ fontSize: 40, fontWeight: 900, color: S.txt, letterSpacing: '-0.04em', margin: '0 0 8px', fontFamily: 'Impact, system-ui, sans-serif' }}>
-            CHOOSE YOUR MODE
-          </h1>
-          <p style={{ fontSize: 13, color: S.txtSub, margin: 0, lineHeight: 1.7 }}>
-            Draft simulator · AI Recruiting · Road to Glory · Franchise · Season · Playoffs · Combine · Analytics · Historical Eras · Rebuild Challenge
-          </p>
-        </motion.div>
-
-        {/* Sections */}
-        {SECTIONS.map((section, si) => (
-          <motion.div
-            key={section.label}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: si * 0.07 + 0.1, duration: 0.3 }}
-            style={{ marginBottom: 36 }}
+        {/* ── Nav ── */}
+        <nav style={{
+          position: 'sticky', top: 0, zIndex: 100,
+          height: 56, background: `rgba(5,8,15,.93)`, backdropFilter: 'blur(14px)',
+          borderBottom: `1px solid ${C.border}`,
+          display: 'flex', alignItems: 'center',
+          padding: '0 24px', gap: 12,
+        }}>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              background: 'none', border: `1px solid ${C.border}`,
+              borderRadius: 8, color: C.txtSub, cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, padding: '6px 12px',
+              transition: 'border-color 160ms, color 160ms',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.borderHi; (e.currentTarget as HTMLButtonElement).style.color = C.txt; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.txtSub; }}
           >
-            {/* Section header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 13 }}>{section.icon}</span>
-              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: S.txtMuted }}>
-                {section.label}
-              </span>
-              <div style={{ flex: 1, height: 1, background: S.border }} />
+            ← Home
+          </button>
+          <span style={{ color: C.border, fontSize: 16 }}>|</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.txt }}>Game Modes</span>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[
+              { label: 'Draft', route: '/draft/select' },
+              { label: 'Scouting', route: '/scouting' },
+              { label: 'Analytics', route: '/analytics' },
+              { label: 'Fantasy', route: '/fantasy' },
+            ].map(l => (
+              <button
+                key={l.route}
+                onClick={() => navigate(l.route)}
+                style={{
+                  fontSize: 11, fontWeight: 700, color: C.txtSub,
+                  background: 'none', border: `1px solid transparent`,
+                  borderRadius: 7, cursor: 'pointer', padding: '5px 12px',
+                  transition: 'color 140ms, border-color 140ms',
+                }}
+                onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = C.txt; b.style.borderColor = C.border; }}
+                onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = C.txtSub; b.style.borderColor = 'transparent'; }}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 24px 72px' }}>
+
+          {/* ── Hero header ── */}
+          <div style={{ marginBottom: 52, animation: 'fadeUp .35s ease both' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.2em', textTransform: 'uppercase', color: C.txtMuted, marginBottom: 10 }}>
+              GridironIQ · Front Office Platform
             </div>
+            <h1 style={{ fontSize: 48, fontWeight: 900, letterSpacing: '-.04em', margin: '0 0 10px', color: C.txt, lineHeight: 1 }}>
+              CHOOSE YOUR MODE
+            </h1>
+            <p style={{ fontSize: 14, color: C.txtSub, margin: 0, lineHeight: 1.7, maxWidth: 600 }}>
+              Draft simulator · AI Recruiting · Road to Glory · Franchise · Season · Playoffs · Combine · Analytics · Historical Eras · Rebuild Challenge
+            </p>
+          </div>
 
-            {/* Card grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {section.modes.map((mode, mi) => (
-                <motion.button
-                  key={mode.key}
-                  initial={{ opacity: 0, scale: 0.97 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: si * 0.07 + mi * 0.04 + 0.15 }}
-                  whileHover={{ scale: 1.018, y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate(mode.route)}
-                  style={{
-                    gridColumn: mode.wide ? 'span 2' : 'span 1',
-                    padding: '18px 16px',
-                    borderRadius: 10,
-                    background: S.surface,
-                    border: `1px solid ${S.border}`,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    position: 'relative',
-                    overflow: 'hidden',
-                    transition: 'border-color 0.12s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = mode.color + '44')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = S.border)}
-                >
-                  {/* Glow */}
-                  <div style={{
-                    position: 'absolute', top: -20, right: -20, width: 100, height: 100,
-                    borderRadius: '50%', background: `${mode.color}14`, filter: 'blur(30px)', pointerEvents: 'none',
-                  }} />
-
-                  <div style={{ position: 'relative' }}>
-                    {/* Top row */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <span style={{ fontSize: 22 }}>{mode.icon}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {mode.badge && (
-                          <span style={{
-                            fontSize: 8, fontWeight: 800, letterSpacing: '0.08em', padding: '2px 5px',
-                            borderRadius: 3, background: `${mode.color}22`, border: `1px solid ${mode.color}44`,
-                            color: mode.color,
-                          }}>
-                            {mode.badge}
-                          </span>
-                        )}
-                        <span style={{
-                          fontSize: 8, fontWeight: 600, letterSpacing: '0.08em', padding: '2px 5px',
-                          borderRadius: 3, background: 'rgba(255,255,255,0.04)', border: `1px solid ${S.border}`,
-                          color: S.txtMuted,
-                        }}>
-                          {mode.tag}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Text */}
-                    <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: S.txtMuted, marginBottom: 3 }}>
-                      {mode.subtitle}
-                    </div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: S.txt, letterSpacing: '-0.02em', marginBottom: 5, fontFamily: 'Impact, system-ui, sans-serif' }}>
-                      {mode.title}
-                    </div>
-                    <div style={{ fontSize: 11, color: S.txtSub, lineHeight: 1.6 }}>
-                      {mode.desc}
-                    </div>
-
-                    {/* Arrow line */}
-                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ height: 1, flex: 1, background: `linear-gradient(to right, ${mode.color}44, transparent)` }} />
-                      <span style={{ fontSize: 12, color: mode.color }}>→</span>
-                    </div>
-                  </div>
-                </motion.button>
+          {/* ── Section 1: Main Game Modes ── */}
+          <section style={{ marginBottom: 44, animation: 'fadeUp .4s .05s ease both' }}>
+            <SectionHead
+              sub="Exhibition, Season, and Franchise football"
+              style={{ marginBottom: 18 }}
+            >
+              Main Game Modes
+            </SectionHead>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+              {MAIN_GAMES.map(m => (
+                <FeaturedCard key={m.key} mode={m} />
               ))}
             </div>
-          </motion.div>
-        ))}
+          </section>
+
+          {/* ── Section 2: Draft & Scouting ── */}
+          <section style={{ marginBottom: 44, animation: 'fadeUp .4s .1s ease both' }}>
+            <SectionHead
+              sub="Mock draft, big board, and analytics tools"
+              style={{ marginBottom: 18 }}
+            >
+              Draft &amp; Scouting
+            </SectionHead>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+              {DRAFT_TOOLS.map(m => (
+                <FeaturedCard key={m.key} mode={m} />
+              ))}
+            </div>
+          </section>
+
+          {/* ── Section 3: More Modes ── */}
+          <section style={{ animation: 'fadeUp .4s .15s ease both' }}>
+            <SectionHead
+              sub="Career, Rebuild, Historical, Recruiting, Combine, Fantasy"
+              style={{ marginBottom: 18 }}
+            >
+              More Modes
+            </SectionHead>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+              {MORE_MODES.map(m => (
+                <FeaturedCard key={m.key} mode={m} />
+              ))}
+            </div>
+          </section>
+
+        </div>
       </div>
-    </div>
+    </>
   );
 }

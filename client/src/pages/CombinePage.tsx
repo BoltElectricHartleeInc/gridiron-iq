@@ -1,15 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const BG = '#050508';
-const SURFACE = '#0a0a14';
-const BORDER = 'rgba(255,255,255,0.06)';
-const GREEN = '#00ff87';
-const RED = '#ff4757';
-const GOLD = '#ffd700';
-const BLUE = '#4fc3f7';
+import { AppShell, C, GLOBAL_CSS, Btn } from '../components/AppShell';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EventKey = 'dash' | 'bench' | 'wonderlic' | 'routes' | 'qb';
@@ -107,10 +99,10 @@ function gpaToGrade(gpa: number): string {
   return 'F';
 }
 function gradeColor(g: string): string {
-  if (g.startsWith('A')) return GREEN;
-  if (g.startsWith('B')) return BLUE;
-  if (g.startsWith('C')) return GOLD;
-  return RED;
+  if (g.startsWith('A')) return C.green;
+  if (g.startsWith('B')) return C.blueBright;
+  if (g.startsWith('C')) return C.gold;
+  return C.red;
 }
 function draftProjection(g: string): string {
   if (g === 'A+') return 'NFL scouts are comparing you to generational athletes';
@@ -120,6 +112,23 @@ function draftProjection(g: string): string {
   if (g === 'B') return 'Day 3 value';
   if (g === 'B-') return 'Undrafted Free Agent candidate';
   return 'Camp body — needs development';
+}
+
+// ─── Shared button style ───────────────────────────────────────────────────────
+function btnStyle(variant: 'primary' | 'secondary'): React.CSSProperties {
+  return {
+    padding: '12px 28px',
+    borderRadius: 10,
+    border: `1px solid ${variant === 'primary' ? C.green : C.border}`,
+    background: variant === 'primary' ? C.green : C.surface,
+    color: variant === 'primary' ? C.txtInvert : C.txt,
+    fontWeight: 700,
+    fontSize: 15,
+    cursor: 'pointer',
+    letterSpacing: 1,
+    transition: 'all 0.2s',
+    fontFamily: C.font,
+  };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -132,7 +141,7 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
   const [holding, setHolding] = useState(false);
   const [falseStart, setFalseStart] = useState(false);
   const [time, setTime] = useState<number | null>(null);
-  const [runnerPos, setRunnerPos] = useState(0); // 0-100%
+  const [runnerPos, setRunnerPos] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const powerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const goReadyRef = useRef(false);
@@ -161,7 +170,6 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
       setCountdown(c);
       if (c <= 0) {
         clearAll();
-        // Random delay before GO
         const delay = 800 + Math.random() * 1000;
         setTimeout(() => {
           goReadyRef.current = true;
@@ -171,15 +179,13 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
     }, 1000);
   };
 
-  // Power meter fill while holding
   useEffect(() => {
     if (holding && phase === 'drive') {
       powerRef.current = setInterval(() => {
         setPower(p => {
-          const next = Math.min(100, p + 100 / 80); // fills in 0.8s at 100fps
+          const next = Math.min(100, p + 100 / 80);
           if (next >= 100) {
             clearInterval(powerRef.current!);
-            // Auto release at 100 — late
             release(100);
           }
           return next;
@@ -199,12 +205,11 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
     let result: number;
     if (optimal) result = 4.28 + Math.random() * 0.1;
     else if (slightly) result = 4.38 + Math.random() * 0.07;
-    else if (p < 75) result = 4.5 + Math.random() * 0.2; // early
-    else result = 4.44 + Math.random() * 0.08; // late (>95)
+    else if (p < 75) result = 4.5 + Math.random() * 0.2;
+    else result = 4.44 + Math.random() * 0.08;
     setTime(result);
     setPhase('result');
 
-    // Animate runner
     let pos = 0;
     const run = setInterval(() => {
       pos = Math.min(100, pos + 2.5);
@@ -216,7 +221,6 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
   const handleInteract = useCallback(() => {
     if (phase === 'idle' || phase === 'result') return;
     if (phase === 'set' || phase === 'countdown') {
-      // Too early
       clearAll();
       setFalseStart(true);
       setPhase('idle');
@@ -273,32 +277,30 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
     result: time !== null ? `${time.toFixed(2)}s — ${dashGrade(time)}` : '',
   };
 
-  const powerColor = power >= 85 && power <= 95 ? GREEN : power > 95 ? RED : GOLD;
+  const powerColor = power >= 85 && power <= 95 ? C.green : power > 95 ? C.red : C.gold;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Track */}
       <div style={{
-        background: '#1a3a1a',
+        background: 'linear-gradient(180deg, #0a1a0a 0%, #0d200d 100%)',
         borderRadius: 12,
-        height: 80,
+        height: 90,
         position: 'relative',
         overflow: 'hidden',
-        border: `1px solid ${BORDER}`,
+        border: `1px solid ${C.border}`,
+        boxShadow: `inset 0 1px 0 rgba(0,200,83,0.08)`,
       }}>
-        {/* Lanes */}
         {[0.25, 0.5, 0.75].map(y => (
           <div key={y} style={{
             position: 'absolute', left: 0, right: 0,
-            top: `${y * 100}%`, height: 1, background: 'rgba(255,255,255,0.1)',
+            top: `${y * 100}%`, height: 1, background: 'rgba(255,255,255,0.06)',
           }} />
         ))}
-        {/* Finish line */}
         <div style={{
           position: 'absolute', right: 20, top: 0, bottom: 0,
-          width: 3, background: 'white', opacity: 0.6,
+          width: 3, background: 'white', opacity: 0.5,
         }} />
-        {/* Runner */}
         <motion.div
           animate={{ left: `${Math.max(2, runnerPos - 4)}%` }}
           transition={{ ease: 'linear', duration: 0.05 }}
@@ -308,19 +310,18 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
           }}
         >
           <div style={{
-            width: 20, height: 20, borderRadius: '50%',
-            background: GREEN,
-            boxShadow: `0 0 12px ${GREEN}`,
+            width: 22, height: 22, borderRadius: '50%',
+            background: C.green,
+            boxShadow: `0 0 16px ${C.green}`,
             margin: '0 auto',
           }} />
-          {/* CSS legs */}
           <div style={{
             display: 'flex', justifyContent: 'center', gap: 4,
             marginTop: 2,
             animation: phase === 'drive' || runnerPos > 0 ? 'leg-run 0.3s infinite alternate' : 'none',
           }}>
-            <div style={{ width: 4, height: 8, background: GREEN, borderRadius: 2 }} />
-            <div style={{ width: 4, height: 8, background: GREEN, borderRadius: 2 }} />
+            <div style={{ width: 4, height: 8, background: C.green, borderRadius: 2 }} />
+            <div style={{ width: 4, height: 8, background: C.green, borderRadius: 2 }} />
           </div>
         </motion.div>
       </div>
@@ -332,20 +333,20 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           style={{
-            fontSize: phase === 'go' ? 48 : 24,
+            fontSize: phase === 'go' ? 52 : 24,
             fontWeight: 900,
-            color: phase === 'go' ? GREEN : 'white',
+            color: phase === 'go' ? C.green : C.txt,
             letterSpacing: 3,
+            textShadow: phase === 'go' ? `0 0 40px ${C.green}` : 'none',
           }}
         >
           {phase === 'go' ? 'GO!' : phaseLabel[phase] ?? ''}
         </motion.div>
-
         {falseStart && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            style={{ color: RED, marginTop: 8, fontWeight: 700 }}
+            style={{ color: C.red, marginTop: 8, fontWeight: 700 }}
           >
             FALSE START — Try again
           </motion.div>
@@ -354,27 +355,34 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
 
       {/* Power meter */}
       {(phase === 'drive' || phase === 'result') && (
-        <div style={{ padding: '0 40px' }}>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+        <div style={{ padding: '0 32px' }}>
+          <div style={{ fontSize: 11, color: C.txtSub, marginBottom: 6, letterSpacing: 1 }}>
             POWER METER — Release in green zone (85-95%)
           </div>
           <div style={{
-            height: 24, background: 'rgba(255,255,255,0.08)', borderRadius: 12,
-            overflow: 'hidden', position: 'relative', border: `1px solid ${BORDER}`,
+            height: 28, background: C.elevated, borderRadius: 14,
+            overflow: 'hidden', position: 'relative', border: `1px solid ${C.border}`,
           }}>
             <motion.div
               animate={{ width: `${power}%` }}
-              style={{ height: '100%', background: powerColor, borderRadius: 12, transition: 'background 0.1s' }}
+              style={{
+                height: '100%',
+                background: `linear-gradient(90deg, ${powerColor}88, ${powerColor})`,
+                borderRadius: 14,
+                transition: 'background 0.1s',
+                boxShadow: `0 0 12px ${powerColor}50`,
+              }}
             />
-            {/* Optimal zone marker */}
             <div style={{
               position: 'absolute', left: '85%', top: 0, bottom: 0,
-              width: '10%', background: 'rgba(0,255,135,0.2)',
-              border: `1px solid ${GREEN}`,
+              width: '10%', background: `${C.green}20`,
+              border: `1px solid ${C.green}`,
             }} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-            <span>0%</span><span style={{ color: GREEN }}>SWEET ZONE 85-95%</span><span>100%</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11, color: C.txtSub }}>
+            <span>0%</span>
+            <span style={{ color: C.green, fontWeight: 700 }}>SWEET ZONE 85-95%</span>
+            <span>100%</span>
           </div>
         </div>
       )}
@@ -386,20 +394,24 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
           animate={{ y: 0, opacity: 1 }}
           style={{ textAlign: 'center' }}
         >
-          <div style={{ fontSize: 64, fontWeight: 900, color: gradeColor(dashGrade(time)), letterSpacing: -2 }}>
+          <div style={{
+            fontSize: 72, fontWeight: 900,
+            color: gradeColor(dashGrade(time)), letterSpacing: -2,
+            textShadow: `0 0 40px ${gradeColor(dashGrade(time))}50`,
+          }}>
             {time.toFixed(2)}s
           </div>
-          <div style={{ fontSize: 32, fontWeight: 700, color: gradeColor(dashGrade(time)) }}>
+          <div style={{ fontSize: 36, fontWeight: 700, color: gradeColor(dashGrade(time)) }}>
             Grade: {dashGrade(time)}
           </div>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
             <button onClick={startDrill} style={btnStyle('secondary')}>Retry</button>
             <button onClick={submit} style={btnStyle('primary')}>Lock In Score</button>
           </div>
         </motion.div>
       )}
 
-      {(phase === 'idle') && (
+      {phase === 'idle' && (
         <div style={{ textAlign: 'center' }}>
           <button
             onMouseDown={handleInteract}
@@ -408,7 +420,7 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
           >
             {time !== null ? 'Run Again' : 'Press READY'}
           </button>
-          <div style={{ color: 'rgba(255,255,255,0.4)', marginTop: 8, fontSize: 12 }}>
+          <div style={{ color: C.txtSub, marginTop: 10, fontSize: 12 }}>
             Press SPACE or click to interact during the drill
           </div>
         </div>
@@ -421,9 +433,10 @@ function DashEvent({ onComplete }: { onComplete: (result: EventResult) => void }
             onMouseUp={handleRelease}
             style={{
               ...btnStyle('primary'),
-              background: phase === 'go' ? GREEN : SURFACE,
-              color: phase === 'go' ? '#000' : 'white',
+              background: phase === 'go' ? C.green : C.surface,
+              color: phase === 'go' ? C.txtInvert : C.txt,
               transform: holding ? 'scale(0.97)' : 'scale(1)',
+              boxShadow: phase === 'go' ? `0 0 24px ${C.green}60` : 'none',
             }}
           >
             {phase === 'set' ? 'WAIT...' : phase === 'go' ? 'DRIVE!' : 'HOLDING — RELEASE!'}
@@ -439,9 +452,9 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
   const [phase, setPhase] = useState<'idle' | 'active' | 'result'>('idle');
   const [reps, setReps] = useState(0);
   const [timeLeft, setTimeLeft] = useState(60);
-  const [barY, setBarY] = useState(0); // 0=top, 1=bottom
+  const [barY, setBarY] = useState(0);
   const [atTop, setAtTop] = useState(true);
-  const [barSpeed, setBarSpeed] = useState(1800); // ms per cycle
+  const [barSpeed, setBarSpeed] = useState(1800);
   const [lastPress, setLastPress] = useState<'hit' | 'miss' | null>(null);
   const cycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -476,17 +489,14 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
 
   const startCycle = (speed: number) => {
     if (cycleRef.current) clearInterval(cycleRef.current);
-    // Animate bar: top -> bottom -> top
-    let going = false; // false=going down, true=going up
+    let going = false;
     cycleRef.current = setInterval(() => {
       going = !going;
       if (!going) {
-        // At bottom
         setBarY(1);
         setAtTop(false);
         atTopRef.current = false;
       } else {
-        // At top
         setBarY(0);
         setAtTop(true);
         atTopRef.current = true;
@@ -508,7 +518,6 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
     repsRef.current++;
     setReps(repsRef.current);
     setLastPress('hit');
-    // Speed up after rep 15
     if (repsRef.current === 15) {
       barSpeedRef.current = 1400;
       startCycle(1400);
@@ -547,17 +556,16 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
     });
   };
 
-  const barTop = barY === 0 ? 20 : 90; // px from top of container
+  const barTop = barY === 0 ? 20 : 90;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Timer */}
       {phase === 'active' && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 32, fontWeight: 900, color: timeLeft < 10 ? RED : 'white' }}>
+          <div style={{ fontSize: 36, fontWeight: 900, color: timeLeft < 10 ? C.red : C.txt }}>
             {timeLeft}s
           </div>
-          <div style={{ fontSize: 32, fontWeight: 900, color: GREEN }}>
+          <div style={{ fontSize: 36, fontWeight: 900, color: C.green }}>
             {reps} REPS
           </div>
         </div>
@@ -565,28 +573,28 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
 
       {/* Barbell animation */}
       <div style={{
-        background: SURFACE,
-        border: `1px solid ${BORDER}`,
+        background: 'linear-gradient(180deg, #10180f 0%, #0a1209 100%)',
+        border: `1px solid ${C.border}`,
         borderRadius: 12,
-        height: 180,
+        height: 200,
         position: 'relative',
         overflow: 'hidden',
+        boxShadow: `inset 0 1px 0 rgba(0,200,83,0.06)`,
       }}>
-        {/* Top zone indicator */}
         <div style={{
-          position: 'absolute', top: 10, left: 0, right: 0, height: 50,
-          background: atTop && phase === 'active' ? 'rgba(0,255,135,0.1)' : 'transparent',
-          border: atTop && phase === 'active' ? `1px solid ${GREEN}` : '1px dashed rgba(255,255,255,0.1)',
+          position: 'absolute', top: 10, left: 0, right: 0, height: 60,
+          background: atTop && phase === 'active' ? `${C.green}12` : 'transparent',
+          border: atTop && phase === 'active' ? `1px solid ${C.green}` : `1px dashed ${C.border}`,
           margin: '0 20px',
           borderRadius: 6,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, color: GREEN, fontWeight: 700, letterSpacing: 2,
+          fontSize: 11, color: C.green, fontWeight: 700, letterSpacing: 2,
           transition: 'all 0.15s',
+          boxShadow: atTop && phase === 'active' ? `0 0 20px ${C.green}20` : 'none',
         }}>
           {atTop && phase === 'active' ? 'PRESS NOW!' : 'PRESS ZONE'}
         </div>
 
-        {/* Bar */}
         <motion.div
           animate={{ top: barTop }}
           transition={{ duration: barSpeedRef.current / 2000, ease: 'easeInOut' }}
@@ -597,37 +605,33 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
             top: barTop,
           }}
         >
-          {/* Weights left */}
           <div style={{
             position: 'absolute', left: -8, top: -12,
             width: 24, height: 40, borderRadius: 4,
-            background: '#888', border: '2px solid #555',
+            background: '#666', border: '2px solid #444',
           }} />
           <div style={{
             position: 'absolute', left: 12, top: -8,
             width: 18, height: 32, borderRadius: 3,
-            background: '#666', border: '2px solid #444',
+            background: '#555', border: '2px solid #333',
           }} />
-          {/* Bar itself */}
           <div style={{
             position: 'absolute', left: 0, right: 0,
-            height: 16, background: '#aaa', borderRadius: 8,
+            height: 16, background: '#999', borderRadius: 8,
           }} />
-          {/* Weights right */}
           <div style={{
             position: 'absolute', right: 12, top: -8,
             width: 18, height: 32, borderRadius: 3,
-            background: '#666', border: '2px solid #444',
+            background: '#555', border: '2px solid #333',
           }} />
           <div style={{
             position: 'absolute', right: -8, top: -12,
             width: 24, height: 40, borderRadius: 4,
-            background: '#888', border: '2px solid #555',
+            background: '#666', border: '2px solid #444',
           }} />
         </motion.div>
       </div>
 
-      {/* Feedback */}
       <AnimatePresence>
         {lastPress && (
           <motion.div
@@ -636,8 +640,9 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
             animate={{ y: 0, opacity: 1 }}
             exit={{ opacity: 0 }}
             style={{
-              textAlign: 'center', fontWeight: 700, fontSize: 20,
-              color: lastPress === 'hit' ? GREEN : RED,
+              textAlign: 'center', fontWeight: 900, fontSize: 22,
+              color: lastPress === 'hit' ? C.green : C.red,
+              textShadow: `0 0 20px ${lastPress === 'hit' ? C.green : C.red}50`,
             }}
           >
             {lastPress === 'hit' ? `✓ REP ${reps}!` : '✗ Missed window!'}
@@ -648,7 +653,7 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
       {phase === 'idle' && (
         <div style={{ textAlign: 'center' }}>
           <button onClick={start} style={btnStyle('primary')}>Start Bench Press</button>
-          <div style={{ color: 'rgba(255,255,255,0.4)', marginTop: 8, fontSize: 12 }}>
+          <div style={{ color: C.txtSub, marginTop: 10, fontSize: 12 }}>
             Click or press SPACE when bar is in the green zone
           </div>
         </div>
@@ -656,7 +661,7 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
 
       {phase === 'active' && (
         <div style={{ textAlign: 'center' }}>
-          <button onMouseDown={press} style={{ ...btnStyle('primary'), minWidth: 200 }}>
+          <button onMouseDown={press} style={{ ...btnStyle('primary'), minWidth: 220 }}>
             PRESS (SPACE)
           </button>
         </div>
@@ -664,12 +669,16 @@ function BenchEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
 
       {phase === 'result' && (
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 56, fontWeight: 900, color: gradeColor(benchGrade(reps)) }}>{reps}</div>
-          <div style={{ fontSize: 20, color: 'rgba(255,255,255,0.6)' }}>REPS AT 225 LBS</div>
-          <div style={{ fontSize: 32, fontWeight: 700, color: gradeColor(benchGrade(reps)), marginTop: 8 }}>
+          <div style={{
+            fontSize: 72, fontWeight: 900,
+            color: gradeColor(benchGrade(reps)),
+            textShadow: `0 0 40px ${gradeColor(benchGrade(reps))}50`,
+          }}>{reps}</div>
+          <div style={{ fontSize: 20, color: C.txtSub }}>REPS AT 225 LBS</div>
+          <div style={{ fontSize: 36, fontWeight: 700, color: gradeColor(benchGrade(reps)), marginTop: 8 }}>
             Grade: {benchGrade(reps)}
           </div>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
             <button onClick={start} style={btnStyle('secondary')}>Retry</button>
             <button onClick={submit} style={btnStyle('primary')}>Lock In Score</button>
           </div>
@@ -767,21 +776,25 @@ function WonderlicEvent({ onComplete }: { onComplete: (r: EventResult) => void }
       {phase === 'active' && (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>
+            <div style={{ color: C.txtSub, fontSize: 13, fontWeight: 600 }}>
               Question {current + 1} of {WONDERLIC_QS.length}
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: timeLeft < 20 ? RED : GOLD }}>
+            <div style={{
+              fontSize: 28, fontWeight: 900,
+              color: timeLeft < 20 ? C.red : C.gold,
+              textShadow: timeLeft < 20 ? `0 0 20px ${C.red}50` : 'none',
+            }}>
               {timeLeft}s
             </div>
           </div>
 
-          {/* Progress */}
-          <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
+          <div style={{ height: 4, background: C.elevated, borderRadius: 2 }}>
             <div style={{
               height: '100%', borderRadius: 2,
-              width: `${((current) / WONDERLIC_QS.length) * 100}%`,
-              background: GREEN,
+              width: `${(current / WONDERLIC_QS.length) * 100}%`,
+              background: C.green,
               transition: 'width 0.3s',
+              boxShadow: `0 0 8px ${C.green}40`,
             }} />
           </div>
 
@@ -794,10 +807,12 @@ function WonderlicEvent({ onComplete }: { onComplete: (r: EventResult) => void }
               style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
             >
               <div style={{
-                fontSize: 20, fontWeight: 700, color: 'white',
+                fontSize: 18, fontWeight: 700, color: C.txt,
                 padding: '20px 24px',
-                background: SURFACE, borderRadius: 12, border: `1px solid ${BORDER}`,
-                lineHeight: 1.5,
+                background: C.elevated,
+                borderRadius: 12,
+                border: `1px solid ${C.borderHi}`,
+                lineHeight: 1.6,
               }}>
                 {q.q}
               </div>
@@ -806,11 +821,12 @@ function WonderlicEvent({ onComplete }: { onComplete: (r: EventResult) => void }
                 {q.opts.map((opt, i) => {
                   const isSelected = selected === i;
                   const isCorrectOpt = i === q.answer;
-                  let bg = 'rgba(255,255,255,0.04)';
-                  let border = BORDER;
+                  let bg = C.surface;
+                  let border = C.border;
+                  let color = C.txt;
                   if (selected !== null) {
-                    if (isCorrectOpt) { bg = 'rgba(0,255,135,0.15)'; border = GREEN; }
-                    else if (isSelected) { bg = 'rgba(255,71,87,0.15)'; border = RED; }
+                    if (isCorrectOpt) { bg = C.greenSub; border = C.green; color = C.green; }
+                    else if (isSelected) { bg = C.redSub; border = C.red; color = C.red; }
                   }
                   return (
                     <button
@@ -821,19 +837,21 @@ function WonderlicEvent({ onComplete }: { onComplete: (r: EventResult) => void }
                         background: bg,
                         border: `1px solid ${border}`,
                         borderRadius: 10,
-                        color: 'white',
-                        fontSize: 16,
+                        color,
+                        fontSize: 15,
                         cursor: selected !== null ? 'default' : 'pointer',
                         textAlign: 'left',
-                        display: 'flex', alignItems: 'center', gap: 12,
+                        display: 'flex', alignItems: 'center', gap: 14,
                         transition: 'all 0.2s',
+                        fontFamily: C.font,
                       }}
                     >
                       <span style={{
-                        width: 28, height: 28, borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.08)',
+                        width: 30, height: 30, borderRadius: '50%',
+                        background: C.elevated,
+                        border: `1px solid ${border}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 700, fontSize: 13, flexShrink: 0,
+                        fontWeight: 800, fontSize: 12, flexShrink: 0, color,
                       }}>
                         {['A', 'B', 'C', 'D'][i]}
                       </span>
@@ -849,25 +867,29 @@ function WonderlicEvent({ onComplete }: { onComplete: (r: EventResult) => void }
 
       {phase === 'idle' && (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🧠</div>
-          <div style={{ fontSize: 20, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>
+          <div style={{ fontSize: 52, marginBottom: 16 }}>🧠</div>
+          <div style={{ fontSize: 20, color: C.txt, fontWeight: 700, marginBottom: 8 }}>
             12 Football IQ Questions
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 24 }}>90 seconds — answer as many as you can</div>
+          <div style={{ color: C.txtSub, marginBottom: 28 }}>90 seconds — answer as many as you can</div>
           <button onClick={start} style={btnStyle('primary')}>Start Quiz</button>
         </div>
       )}
 
       {phase === 'result' && (
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 64, fontWeight: 900, color: gradeColor(wonderlicGrade(finalCorrect)) }}>
+          <div style={{
+            fontSize: 72, fontWeight: 900,
+            color: gradeColor(wonderlicGrade(finalCorrect)),
+            textShadow: `0 0 40px ${gradeColor(wonderlicGrade(finalCorrect))}50`,
+          }}>
             {finalCorrect}/12
           </div>
-          <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.6)' }}>Correct Answers</div>
-          <div style={{ fontSize: 32, fontWeight: 700, color: gradeColor(wonderlicGrade(finalCorrect)), marginTop: 8 }}>
+          <div style={{ fontSize: 18, color: C.txtSub }}>Correct Answers</div>
+          <div style={{ fontSize: 36, fontWeight: 700, color: gradeColor(wonderlicGrade(finalCorrect)), marginTop: 8 }}>
             Grade: {wonderlicGrade(finalCorrect)}
           </div>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24 }}>
             <button onClick={start} style={btnStyle('secondary')}>Retry</button>
             <button onClick={submit} style={btnStyle('primary')}>Lock In Score</button>
           </div>
@@ -976,11 +998,11 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {phase === 'active' && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ color: 'rgba(255,255,255,0.6)' }}>
-            Route: <span style={{ color: GOLD, fontWeight: 700 }}>{route.name}</span>
+          <div style={{ color: C.txtSub }}>
+            Route: <span style={{ color: C.gold, fontWeight: 700 }}>{route.name}</span>
           </div>
-          <div style={{ color: GREEN, fontWeight: 700 }}>Score: {score}</div>
-          <div style={{ color: timeLeft(coneTimer) < 0.5 ? RED : 'white', fontWeight: 700 }}>
+          <div style={{ color: C.green, fontWeight: 700 }}>Score: {score}</div>
+          <div style={{ color: coneTimer < 0.5 ? C.red : C.txt, fontWeight: 700 }}>
             {coneTimer.toFixed(1)}s
           </div>
         </div>
@@ -991,24 +1013,23 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
         ref={containerRef}
         onClick={handleFieldClick}
         style={{
-          background: '#1a4a1a',
+          background: 'linear-gradient(180deg, #0a1a0a 0%, #0d200d 50%, #0a1a0a 100%)',
           borderRadius: 12,
-          height: 300,
+          height: 320,
           position: 'relative',
           overflow: 'hidden',
-          border: `1px solid ${BORDER}`,
+          border: `1px solid ${C.border}`,
           cursor: phase === 'active' ? 'crosshair' : 'default',
+          boxShadow: `inset 0 0 60px rgba(0,0,0,0.4)`,
         }}
       >
-        {/* Yard lines */}
         {[20, 40, 60, 80].map(y => (
           <div key={y} style={{
             position: 'absolute', left: 0, right: 0,
-            top: `${y}%`, height: 1, background: 'rgba(255,255,255,0.15)',
+            top: `${y}%`, height: 1, background: 'rgba(255,255,255,0.08)',
           }} />
         ))}
 
-        {/* Route path */}
         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} overflow="visible">
           {route.cones.map((cone, i) => {
             if (i === 0) return null;
@@ -1018,7 +1039,7 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
                 key={i}
                 x1={`${prev.x}%`} y1={`${prev.y}%`}
                 x2={`${cone.x}%`} y2={`${cone.y}%`}
-                stroke="rgba(255,255,255,0.2)"
+                stroke={`${C.gold}30`}
                 strokeWidth={2}
                 strokeDasharray="6,4"
               />
@@ -1026,18 +1047,17 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
           })}
         </svg>
 
-        {/* Past cones (faded) */}
         {phase === 'active' && route.cones.slice(0, coneIdx).map((cone, i) => (
           <div key={i} style={{
             position: 'absolute',
             left: `${cone.x}%`, top: `${cone.y}%`,
             transform: 'translate(-50%, -50%)',
             width: 14, height: 14, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.2)',
+            background: 'rgba(255,255,255,0.15)',
+            border: `1px solid rgba(255,255,255,0.2)`,
           }} />
         ))}
 
-        {/* Active cone */}
         {phase === 'active' && activeCone && (
           <motion.div
             key={coneIdx}
@@ -1047,26 +1067,25 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
               position: 'absolute',
               left: `${activeCone.x}%`, top: `${activeCone.y}%`,
               transform: 'translate(-50%, -50%)',
-              width: 28, height: 28, borderRadius: '50%',
-              background: GOLD,
-              boxShadow: `0 0 16px ${GOLD}`,
-              border: '3px solid white',
+              width: 32, height: 32, borderRadius: '50%',
+              background: C.gold,
+              boxShadow: `0 0 20px ${C.gold}, 0 0 40px ${C.gold}40`,
+              border: `3px solid white`,
             }}
           />
         )}
 
-        {/* All cones (idle preview) */}
         {phase !== 'active' && route.cones.map((cone, i) => (
           <div key={i} style={{
             position: 'absolute',
             left: `${cone.x}%`, top: `${cone.y}%`,
             transform: 'translate(-50%, -50%)',
             width: 16, height: 16, borderRadius: '50%',
-            background: GOLD, opacity: 0.5,
+            background: C.gold, opacity: 0.4,
+            border: `1px solid ${C.gold}`,
           }} />
         ))}
 
-        {/* Result flash */}
         {coneResult && (
           <motion.div
             key={coneResult + coneIdx}
@@ -1077,26 +1096,28 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
               position: 'absolute',
               left: `${activeCone?.x ?? 50}%`, top: `${activeCone?.y ?? 50}%`,
               transform: 'translate(-50%, -50%)',
-              color: coneResult.includes('PERFECT') ? GREEN : coneResult === 'Miss' ? RED : GOLD,
+              color: coneResult.includes('PERFECT') ? C.green : coneResult === 'Miss' ? C.red : C.gold,
               fontWeight: 900, fontSize: 16, whiteSpace: 'nowrap',
               pointerEvents: 'none',
+              textShadow: `0 0 12px currentColor`,
             }}
           >
             {coneResult}
           </motion.div>
         )}
 
-        {/* Cone progress bar at top */}
         {phase === 'active' && (
           <div style={{
-            position: 'absolute', bottom: 8, left: 8, right: 8, height: 4,
-            background: 'rgba(255,255,255,0.1)', borderRadius: 2,
+            position: 'absolute', bottom: 8, left: 8, right: 8, height: 5,
+            background: C.elevated, borderRadius: 3,
           }}>
             <div style={{
-              height: '100%', background: coneTimer < 0.5 ? RED : GREEN,
+              height: '100%',
+              background: coneTimer < 0.5 ? C.red : C.green,
               width: `${(coneTimer / 2) * 100}%`,
               transition: 'width 0.1s, background 0.2s',
-              borderRadius: 2,
+              borderRadius: 3,
+              boxShadow: `0 0 8px ${coneTimer < 0.5 ? C.red : C.green}50`,
             }} />
           </div>
         )}
@@ -1104,17 +1125,19 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
 
       {phase === 'idle' && (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
-            Route: <span style={{ color: GOLD }}>{route.name}</span> — Click each cone as it appears
+          <div style={{ color: C.txtSub, marginBottom: 14 }}>
+            Route: <span style={{ color: C.gold, fontWeight: 700 }}>{route.name}</span> — Click each cone as it appears
           </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
             {ROUTES.map((r, i) => (
               <button key={i} onClick={() => setRouteIdx(i)} style={{
-                padding: '6px 14px',
-                background: routeIdx === i ? GOLD : SURFACE,
-                color: routeIdx === i ? '#000' : 'white',
-                border: `1px solid ${routeIdx === i ? GOLD : BORDER}`,
+                padding: '7px 16px',
+                background: routeIdx === i ? C.goldSub : C.surface,
+                color: routeIdx === i ? C.gold : C.txtSub,
+                border: `1px solid ${routeIdx === i ? C.gold : C.border}`,
                 borderRadius: 20, cursor: 'pointer', fontSize: 13,
+                fontFamily: C.font, fontWeight: routeIdx === i ? 700 : 400,
+                transition: 'all 0.2s',
               }}>
                 {r.name}
               </button>
@@ -1126,14 +1149,18 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
 
       {phase === 'result' && (
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 56, fontWeight: 900, color: gradeColor(routeGrade(totalScore)) }}>
+          <div style={{
+            fontSize: 72, fontWeight: 900,
+            color: gradeColor(routeGrade(totalScore)),
+            textShadow: `0 0 40px ${gradeColor(routeGrade(totalScore))}50`,
+          }}>
             {totalScore}/500
           </div>
-          <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.6)' }}>Route Precision Score</div>
-          <div style={{ fontSize: 32, fontWeight: 700, color: gradeColor(routeGrade(totalScore)), marginTop: 8 }}>
+          <div style={{ fontSize: 18, color: C.txtSub }}>Route Precision Score</div>
+          <div style={{ fontSize: 36, fontWeight: 700, color: gradeColor(routeGrade(totalScore)), marginTop: 8 }}>
             Grade: {routeGrade(totalScore)}
           </div>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
             <button onClick={startDrill} style={btnStyle('secondary')}>Retry</button>
             <button onClick={submit} style={btnStyle('primary')}>Lock In Score</button>
           </div>
@@ -1142,8 +1169,6 @@ function RouteEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
     </div>
   );
 }
-
-function timeLeft(t: number): number { return t; }
 
 // ── QB Accuracy ───────────────────────────────────────────────────────────────
 const RECEIVER_POSITIONS = [
@@ -1157,7 +1182,7 @@ function QBEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
   const [throwCount, setThrowCount] = useState(0);
   const [completions, setCompletions] = useState(0);
   const [activeRec, setActiveRec] = useState<number | null>(null);
-  const [openTime, setOpenTime] = useState(0); // ms receiver has been open
+  const [openTime, setOpenTime] = useState(0);
   const [totalScore, setTotalScore] = useState(0);
   const completionsRef = useRef(0);
   const throwRef = useRef(0);
@@ -1172,12 +1197,10 @@ function QBEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
       setPhase('result');
       return;
     }
-    // Pick random receiver
     const rec = Math.floor(Math.random() * 3);
     setActiveRec(rec);
     openStartRef.current = Date.now();
 
-    // Auto-close after 1.2s
     flashTimeoutRef.current = setTimeout(() => {
       throwRef.current++;
       setThrowCount(throwRef.current);
@@ -1201,7 +1224,6 @@ function QBEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
     if (activeRec !== recIdx) return;
     clearTimeout(flashTimeoutRef.current!);
     const elapsed = Date.now() - openStartRef.current;
-    // accuracy: first 500ms = 100%, fades to 60% at 900ms
     const accuracy = elapsed < 500 ? 1.0 : Math.max(0.6, 1.0 - ((elapsed - 500) / 700) * 0.4);
     const pts = Math.round(accuracy * 10);
     scoreRef.current += pts;
@@ -1218,9 +1240,6 @@ function QBEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
     clearInterval(openTimerRef.current!);
   }, []);
 
-  const pct = throwRef.current > 0
-    ? Math.round((completionsRef.current / throwRef.current) * 100)
-    : Math.round((completions / Math.max(1, throwCount)) * 100);
   const finalPct = Math.round((completions / 10) * 100);
 
   const submit = () => {
@@ -1237,29 +1256,28 @@ function QBEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {phase === 'active' && (
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <div>Throw {throwCount + 1} / 10</div>
-          <div style={{ color: GREEN }}>{completions} completions</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ color: C.txtSub, fontWeight: 600 }}>Throw {throwCount + 1} / 10</div>
+          <div style={{ color: C.green, fontWeight: 700 }}>{completions} completions</div>
         </div>
       )}
 
       {/* Field */}
       <div style={{
-        background: '#1a4a1a',
+        background: 'linear-gradient(180deg, #0a1a0a 0%, #0d200d 50%, #0a1a0a 100%)',
         borderRadius: 12,
-        height: 260,
+        height: 280,
         position: 'relative',
-        border: `1px solid ${BORDER}`,
+        border: `1px solid ${C.border}`,
+        boxShadow: `inset 0 0 60px rgba(0,0,0,0.4)`,
       }}>
-        {/* Yard lines */}
         {[33, 66].map(y => (
-          <div key={y} style={{ position: 'absolute', left: 0, right: 0, top: `${y}%`, height: 1, background: 'rgba(255,255,255,0.15)' }} />
+          <div key={y} style={{ position: 'absolute', left: 0, right: 0, top: `${y}%`, height: 1, background: 'rgba(255,255,255,0.08)' }} />
         ))}
-        <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: C.txtSub, letterSpacing: 2 }}>
           LOS
         </div>
 
-        {/* Receivers */}
         {RECEIVER_POSITIONS.map((rec, i) => {
           const isOpen = activeRec === i && phase === 'active';
           return (
@@ -1267,22 +1285,23 @@ function QBEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
               key={i}
               onClick={() => throw_(i)}
               animate={isOpen ? {
-                boxShadow: [`0 0 0px ${GREEN}`, `0 0 24px ${GREEN}`, `0 0 0px ${GREEN}`],
+                boxShadow: [`0 0 0px ${C.green}`, `0 0 28px ${C.green}`, `0 0 0px ${C.green}`],
               } : {}}
               transition={{ duration: 0.6, repeat: Infinity }}
               style={{
                 position: 'absolute',
                 left: `${rec.x}%`, top: `${rec.y}%`,
                 transform: 'translate(-50%, -50%)',
-                width: 44, height: 44,
+                width: 48, height: 48,
                 borderRadius: '50%',
-                background: isOpen ? 'rgba(0,255,135,0.3)' : 'rgba(255,255,255,0.1)',
-                border: `3px solid ${isOpen ? GREEN : 'rgba(255,255,255,0.2)'}`,
+                background: isOpen ? C.greenSub : C.elevated,
+                border: `3px solid ${isOpen ? C.green : C.borderHi}`,
                 cursor: isOpen ? 'pointer' : 'default',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, color: isOpen ? GREEN : 'rgba(255,255,255,0.4)',
+                fontSize: 10, color: isOpen ? C.green : C.txtSub,
                 fontWeight: 700,
                 transition: 'all 0.15s',
+                letterSpacing: 0.5,
               }}
             >
               {rec.label}
@@ -1293,7 +1312,7 @@ function QBEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
 
       {phase === 'idle' && (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 12, fontSize: 13 }}>
+          <div style={{ color: C.txtSub, marginBottom: 14, fontSize: 13 }}>
             Click glowing receivers to throw — quicker = higher accuracy
           </div>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
@@ -1308,16 +1327,20 @@ function QBEvent({ onComplete }: { onComplete: (r: EventResult) => void }) {
 
       {phase === 'result' && (
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 56, fontWeight: 900, color: gradeColor(qbGrade(finalPct)) }}>
+          <div style={{
+            fontSize: 72, fontWeight: 900,
+            color: gradeColor(qbGrade(finalPct)),
+            textShadow: `0 0 40px ${gradeColor(qbGrade(finalPct))}50`,
+          }}>
             {completions}/10
           </div>
-          <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.6)' }}>
+          <div style={{ fontSize: 18, color: C.txtSub }}>
             Completions ({finalPct}%)
           </div>
-          <div style={{ fontSize: 32, fontWeight: 700, color: gradeColor(qbGrade(finalPct)), marginTop: 8 }}>
+          <div style={{ fontSize: 36, fontWeight: 700, color: gradeColor(qbGrade(finalPct)), marginTop: 8 }}>
             Grade: {qbGrade(finalPct)}
           </div>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
             <button onClick={start} style={btnStyle('secondary')}>Retry</button>
             <button onClick={submit} style={btnStyle('primary')}>Lock In Score</button>
           </div>
@@ -1348,7 +1371,6 @@ function ResultsScreen({
     }
   });
   const avg = totalWeight > 0 ? total / totalWeight : 0;
-  // Convert 0-100 to grade
   const overallGrade = avg >= 95 ? 'A+' : avg >= 88 ? 'A' : avg >= 82 ? 'A-' : avg >= 76 ? 'B+' : avg >= 70 ? 'B' : avg >= 64 ? 'B-' : avg >= 58 ? 'C+' : avg >= 52 ? 'C' : 'D';
 
   const shareText = results.map(r => `${r.icon} ${r.label}: ${r.value} (${r.grade})`).join('\n') + `\n\nOverall: ${overallGrade}`;
@@ -1357,11 +1379,23 @@ function ResultsScreen({
     localStorage.setItem('combine-results', JSON.stringify({ results, overallGrade, avg }));
   }, []);
 
+  const overallColor = gradeColor(overallGrade);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Overall */}
-      <div style={{ textAlign: 'center', padding: '32px 0 16px' }}>
-        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', letterSpacing: 3, marginBottom: 8 }}>
+      {/* Overall banner */}
+      <div style={{
+        textAlign: 'center', padding: '40px 24px 28px',
+        background: `linear-gradient(135deg, ${C.surface} 0%, ${overallColor}08 100%)`,
+        borderRadius: 16,
+        border: `1px solid ${overallColor}30`,
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
+          background: `linear-gradient(90deg, transparent, ${overallColor}, transparent)`,
+        }} />
+        <div style={{ fontSize: 13, color: C.txtSub, letterSpacing: 3, marginBottom: 10, fontWeight: 600 }}>
           YOUR COMBINE GRADE
         </div>
         <motion.div
@@ -1369,53 +1403,68 @@ function ResultsScreen({
           animate={{ scale: 1 }}
           transition={{ type: 'spring', bounce: 0.4 }}
           style={{
-            fontSize: 96, fontWeight: 900, lineHeight: 1,
-            color: gradeColor(overallGrade),
-            textShadow: `0 0 60px ${gradeColor(overallGrade)}50`,
+            fontSize: 108, fontWeight: 900, lineHeight: 1,
+            color: overallColor,
+            textShadow: `0 0 80px ${overallColor}50`,
           }}
         >
           {overallGrade}
         </motion.div>
-        <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.7)', marginTop: 12 }}>
+        <div style={{ fontSize: 18, color: C.txtSub, marginTop: 14, fontWeight: 500 }}>
           {draftProjection(overallGrade)}
         </div>
       </div>
 
-      {/* Event cards */}
+      {/* Event result cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {results.map((r, i) => (
-          <motion.div
-            key={r.key}
-            initial={{ x: -30, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: i * 0.08 }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 16,
-              background: SURFACE, borderRadius: 12,
-              padding: '14px 20px',
-              border: `1px solid ${BORDER}`,
-            }}
-          >
-            <span style={{ fontSize: 24 }}>{r.icon}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>{r.label}</div>
+        {results.map((r, i) => {
+          const gc = gradeColor(r.grade);
+          return (
+            <motion.div
+              key={r.key}
+              initial={{ x: -30, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: i * 0.08 }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 16,
+                background: `linear-gradient(135deg, ${C.surface} 0%, ${gc}06 100%)`,
+                borderRadius: 12,
+                padding: '14px 20px',
+                border: `1px solid ${C.border}`,
+                position: 'relative', overflow: 'hidden',
+              }}
+            >
               <div style={{
-                height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden',
-              }}>
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${r.numericScore}%` }}
-                  transition={{ delay: i * 0.08 + 0.3, duration: 0.6 }}
-                  style={{ height: '100%', background: gradeColor(r.grade), borderRadius: 3 }}
-                />
+                position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+                background: gc,
+                boxShadow: `0 0 8px ${gc}50`,
+              }} />
+              <span style={{ fontSize: 26, marginLeft: 8 }}>{r.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, marginBottom: 6, color: C.txt }}>{r.label}</div>
+                <div style={{
+                  height: 6, background: C.elevated, borderRadius: 3, overflow: 'hidden',
+                }}>
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${r.numericScore}%` }}
+                    transition={{ delay: i * 0.08 + 0.3, duration: 0.6 }}
+                    style={{
+                      height: '100%',
+                      background: `linear-gradient(90deg, ${gc}88, ${gc})`,
+                      borderRadius: 3,
+                      boxShadow: `0 0 6px ${gc}40`,
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-            <div style={{ textAlign: 'right', minWidth: 80 }}>
-              <div style={{ fontWeight: 700 }}>{r.value}</div>
-              <div style={{ fontWeight: 900, color: gradeColor(r.grade), fontSize: 18 }}>{r.grade}</div>
-            </div>
-          </motion.div>
-        ))}
+              <div style={{ textAlign: 'right', minWidth: 90 }}>
+                <div style={{ fontWeight: 600, color: C.txtSub, fontSize: 13 }}>{r.value}</div>
+                <div style={{ fontWeight: 900, color: gc, fontSize: 22 }}>{r.grade}</div>
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
 
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', paddingTop: 8 }}>
@@ -1427,22 +1476,6 @@ function ResultsScreen({
       </div>
     </motion.div>
   );
-}
-
-// ─── Shared button style ───────────────────────────────────────────────────────
-function btnStyle(variant: 'primary' | 'secondary'): React.CSSProperties {
-  return {
-    padding: '12px 28px',
-    borderRadius: 10,
-    border: `1px solid ${variant === 'primary' ? GREEN : BORDER}`,
-    background: variant === 'primary' ? GREEN : SURFACE,
-    color: variant === 'primary' ? '#000' : 'white',
-    fontWeight: 700,
-    fontSize: 15,
-    cursor: 'pointer',
-    letterSpacing: 1,
-    transition: 'all 0.2s',
-  };
 }
 
 // ─── Event config ─────────────────────────────────────────────────────────────
@@ -1479,88 +1512,98 @@ export default function CombinePage() {
 
   const currentEvent = EVENT_LIST[currentEventIdx];
 
+  // Event progress indicator for nav right slot
+  const progressDots = !done ? (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {EVENT_LIST.map((e, i) => (
+        <div
+          key={e.key}
+          title={e.label}
+          style={{
+            width: 34, height: 34, borderRadius: '50%',
+            background: i < currentEventIdx
+              ? C.green
+              : i === currentEventIdx
+                ? C.goldSub
+                : C.elevated,
+            border: `2px solid ${
+              i < currentEventIdx
+                ? C.green
+                : i === currentEventIdx
+                  ? C.gold
+                  : C.border
+            }`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14,
+            transition: 'all 0.3s',
+            boxShadow: i === currentEventIdx ? `0 0 14px ${C.gold}40` : 'none',
+          }}
+        >
+          {i < currentEventIdx ? '✓' : e.icon}
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   return (
-    <div style={{ background: BG, minHeight: '100vh', color: 'white', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Top nav */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 16,
-        padding: '16px 24px',
-        borderBottom: `1px solid ${BORDER}`,
-        background: SURFACE,
-      }}>
-        <button onClick={() => navigate('/')} style={{
-          background: 'none', border: `1px solid ${BORDER}`,
-          color: 'rgba(255,255,255,0.6)', borderRadius: 8,
-          padding: '6px 14px', cursor: 'pointer', fontSize: 14,
-        }}>
-          ← Back
-        </button>
-        <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 2 }}>NFL COMBINE</div>
-        {!done && (
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            {EVENT_LIST.map((e, i) => (
-              <div
-                key={e.key}
-                style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: i < currentEventIdx ? GREEN : i === currentEventIdx ? GOLD : 'rgba(255,255,255,0.08)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14, border: `2px solid ${i === currentEventIdx ? GOLD : 'transparent'}`,
-                  transition: 'all 0.3s',
-                }}
-                title={e.label}
-              >
-                {i < currentEventIdx ? '✓' : e.icon}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 24px' }}>
-        <AnimatePresence mode="wait">
-          {done ? (
-            <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <ResultsScreen results={results} onPlayAgain={reset} onBack={() => navigate('/')} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={currentEvent.key}
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -40 }}
-            >
-              {/* Event header */}
-              <div style={{ marginBottom: 28 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <span style={{ fontSize: 36 }}>{currentEvent.icon}</span>
-                  <div>
-                    <div style={{ fontSize: 11, color: GOLD, letterSpacing: 3, fontWeight: 700 }}>
-                      EVENT {currentEventIdx + 1} OF {EVENT_LIST.length}
-                    </div>
-                    <div style={{ fontSize: 28, fontWeight: 900 }}>{currentEvent.label}</div>
-                  </div>
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>{currentEvent.desc}</div>
-              </div>
-
-              {/* Event component */}
-              {currentEvent.key === 'dash' && <DashEvent onComplete={handleComplete} />}
-              {currentEvent.key === 'bench' && <BenchEvent onComplete={handleComplete} />}
-              {currentEvent.key === 'wonderlic' && <WonderlicEvent onComplete={handleComplete} />}
-              {currentEvent.key === 'routes' && <RouteEvent onComplete={handleComplete} />}
-              {currentEvent.key === 'qb' && <QBEvent onComplete={handleComplete} />}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
+    <>
       <style>{`
+        ${GLOBAL_CSS}
         @keyframes leg-run {
           from { transform: skewX(-20deg); }
           to { transform: skewX(20deg); }
         }
       `}</style>
-    </div>
+      <AppShell backTo="/game" title="NFL Combine" right={progressDots}>
+        <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 24px' }}>
+          <AnimatePresence mode="wait">
+            {done ? (
+              <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <ResultsScreen results={results} onPlayAgain={reset} onBack={() => navigate('/game')} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={currentEvent.key}
+                initial={{ opacity: 0, x: 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -40 }}
+              >
+                {/* Event header card */}
+                <div style={{
+                  background: `linear-gradient(135deg, ${C.surface} 0%, ${C.elevated} 100%)`,
+                  borderRadius: 16,
+                  padding: '24px 28px',
+                  marginBottom: 28,
+                  border: `1px solid ${C.borderHi}`,
+                  position: 'relative', overflow: 'hidden',
+                }}>
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
+                    background: `linear-gradient(90deg, ${C.gold}, ${C.blueBright})`,
+                  }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 6 }}>
+                    <span style={{ fontSize: 42 }}>{currentEvent.icon}</span>
+                    <div>
+                      <div style={{ fontSize: 11, color: C.gold, letterSpacing: 3, fontWeight: 700, marginBottom: 2 }}>
+                        EVENT {currentEventIdx + 1} OF {EVENT_LIST.length}
+                      </div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: C.txt }}>{currentEvent.label}</div>
+                    </div>
+                  </div>
+                  <div style={{ color: C.txtSub, fontSize: 14, marginTop: 4 }}>{currentEvent.desc}</div>
+                </div>
+
+                {/* Event component */}
+                {currentEvent.key === 'dash' && <DashEvent onComplete={handleComplete} />}
+                {currentEvent.key === 'bench' && <BenchEvent onComplete={handleComplete} />}
+                {currentEvent.key === 'wonderlic' && <WonderlicEvent onComplete={handleComplete} />}
+                {currentEvent.key === 'routes' && <RouteEvent onComplete={handleComplete} />}
+                {currentEvent.key === 'qb' && <QBEvent onComplete={handleComplete} />}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </AppShell>
+    </>
   );
 }

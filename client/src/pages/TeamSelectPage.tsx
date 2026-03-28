@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { T, teamLogoUrl } from '../styles/tokens';
+import { teamLogoUrl } from '../styles/tokens';
+import { AppShell, C, GLOBAL_CSS, TabBar, Badge } from '../components/AppShell';
 
 type DivisionTab =
   | 'ALL'
@@ -122,23 +123,145 @@ function updateDraftStoreSetting(store: DraftStoreLike | undefined, key: string,
   (store as Record<string, unknown>)[key] = value;
 }
 
-const sectionLabelStyle = {
-  color: T.txtMuted,
-  fontSize: 9,
-  fontWeight: 700,
-  letterSpacing: '0.2em',
-  textTransform: 'uppercase' as const,
-  marginBottom: 8,
-};
+function TeamCard({ team, selected, onSelect }: { team: Team; selected: boolean; onSelect: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const active = selected || hovered;
+  const primaryRgba = (a: number) => hexToRgba(team.primaryColor, a);
 
-const inputCardStyle = {
-  background: T.panel,
-  border: `1px solid ${T.border}`,
-  borderRadius: 10,
-  padding: 10,
-};
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: selected
+          ? `linear-gradient(160deg, ${primaryRgba(0.18)} 0%, ${C.surface} 100%)`
+          : hovered
+            ? `linear-gradient(160deg, ${primaryRgba(0.1)} 0%, ${C.surface} 100%)`
+            : C.surface,
+        border: `1px solid ${selected ? primaryRgba(0.7) : hovered ? primaryRgba(0.4) : C.border}`,
+        borderRadius: 14,
+        padding: '14px 12px 12px',
+        cursor: 'pointer',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 10,
+        position: 'relative',
+        overflow: 'hidden',
+        transition: 'border-color 180ms, background 180ms, box-shadow 180ms',
+        boxShadow: selected
+          ? `0 0 0 1px ${primaryRgba(0.4)}, 0 8px 32px ${primaryRgba(0.35)}, 0 0 60px ${primaryRgba(0.15)}`
+          : hovered
+            ? `0 0 0 1px ${primaryRgba(0.2)}, 0 4px 16px ${primaryRgba(0.2)}`
+            : 'none',
+        fontFamily: C.font,
+        textAlign: 'center',
+        minHeight: 178,
+      }}
+    >
+      {/* Pick number badge */}
+      <div style={{
+        position: 'absolute', top: 8, left: 10,
+        fontSize: 11, fontWeight: 800,
+        color: selected ? team.primaryColor : C.txtSub,
+        letterSpacing: 0.5,
+        transition: 'color 180ms',
+      }}>
+        #{team.pickNumber}
+      </div>
 
-export default function TeamSelectPage({ draftStore, onStart }: TeamSelectPageProps) {
+      {/* Conference badge */}
+      <div style={{
+        position: 'absolute', top: 8, right: 10,
+        fontSize: 9, fontWeight: 800,
+        color: selected ? team.primaryColor : C.txtMuted,
+        letterSpacing: 1,
+        transition: 'color 180ms',
+      }}>
+        {team.abbreviation}
+      </div>
+
+      {/* Bottom accent bar */}
+      {selected && (
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
+          background: `linear-gradient(90deg, transparent, ${team.primaryColor}, transparent)`,
+        }} />
+      )}
+
+      {/* Logo */}
+      <div style={{
+        width: 80, height: 80,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        marginTop: 14,
+        filter: selected
+          ? `drop-shadow(0 0 16px ${primaryRgba(0.6)})`
+          : hovered
+            ? `drop-shadow(0 0 8px ${primaryRgba(0.4)})`
+            : 'none',
+        transition: 'filter 180ms',
+        transform: selected ? 'scale(1.06)' : hovered ? 'scale(1.03)' : 'scale(1)',
+      }}>
+        <img
+          src={teamLogoUrl(team.abbreviation)}
+          alt={`${team.city} ${team.name}`}
+          style={{
+            width: 72, height: 72,
+            objectFit: 'contain',
+            opacity: active ? 1 : 0.65,
+            transition: 'opacity 180ms, transform 180ms',
+          }}
+        />
+      </div>
+
+      {/* Team name */}
+      <div>
+        <div style={{
+          fontSize: 11, fontWeight: 700,
+          color: selected ? C.txt : C.txtSub,
+          lineHeight: 1.3,
+          transition: 'color 180ms',
+        }}>
+          {team.city}
+        </div>
+        <div style={{
+          fontSize: 13, fontWeight: 800,
+          color: selected ? C.txt : C.txtSub,
+          transition: 'color 180ms',
+        }}>
+          {team.name}
+        </div>
+      </div>
+
+      {/* Needs pills */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, justifyContent: 'center' }}>
+        {team.needs.slice(0, 3).map((need) => (
+          <span
+            key={`${team.abbreviation}-${need}`}
+            style={{
+              fontSize: 9,
+              fontWeight: 800,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase' as const,
+              color: selected ? team.primaryColor : C.txtSub,
+              background: selected ? primaryRgba(0.15) : C.elevated,
+              border: `1px solid ${selected ? primaryRgba(0.4) : C.border}`,
+              borderRadius: 999,
+              padding: '2px 6px',
+              transition: 'all 180ms',
+            }}
+          >
+            {need}
+          </span>
+        ))}
+      </div>
+    </button>
+  );
+}
+
+function TeamSelectPageInner({ draftStore, onStart }: TeamSelectPageProps) {
   const [activeTab, setActiveTab] = useState<DivisionTab>('ALL');
   const [selectedAbbreviation, setSelectedAbbreviation] = useState<string | null>(null);
 
@@ -160,188 +283,153 @@ export default function TeamSelectPage({ draftStore, onStart }: TeamSelectPagePr
     [selectedAbbreviation],
   );
 
+  const tabItems = TABS.map(t => ({ id: t, label: t }));
+
+  const sectionLabel = {
+    color: C.txtMuted,
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: '0.2em',
+    textTransform: 'uppercase' as const,
+    marginBottom: 8,
+  };
+
+  const inputCard = {
+    background: C.elevated,
+    border: `1px solid ${C.border}`,
+    borderRadius: 10,
+    padding: 10,
+  };
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: T.bg,
-        color: T.txt,
-        fontFamily: T.fontBase,
-        padding: 24,
-      }}
-    >
-      <style>
-        {`
-          .conference-tab {
-            position: relative;
-            color: ${T.txtSub};
-            background: transparent;
-            border: none;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            padding: 10px 0;
-            cursor: pointer;
-            transition: color 140ms ease;
-            white-space: nowrap;
-          }
-
-          .conference-tab:hover {
-            color: ${T.txt};
-          }
-
-          .conference-tab.active {
-            color: ${T.blueBright};
-          }
-
-          .conference-tab.active::after {
-            content: '';
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: -1px;
-            height: 2px;
-            border-radius: 999px;
-            background: ${T.blueBright};
-          }
-
-          .team-select-card {
-            min-height: 160px;
-            border-radius: 12px;
-            border: 1px solid ${T.border};
-            background: ${T.panel};
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            gap: 8px;
-            padding: 12px;
-            transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
-            cursor: pointer;
-          }
-
-          .team-select-card .team-logo {
-            width: 52px;
-            height: 52px;
-            object-fit: contain;
-            opacity: 0.7;
-            transition: opacity 170ms ease, transform 170ms ease;
-          }
-
-          .team-select-card:hover .team-logo {
-            opacity: 1;
-            transform: scale(1.015);
-          }
-
-          .team-select-card.selected .team-logo {
-            opacity: 1;
-          }
-        `}
-      </style>
-
-      <div
-        style={{
-          maxWidth: 1360,
-          margin: '0 auto',
+    <>
+      <style>{GLOBAL_CSS}</style>
+      <AppShell
+        title="Team Select"
+        backTo="/"
+        backLabel="Home"
+        maxWidth={1400}
+      >
+        <div style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) 340px',
+          gridTemplateColumns: 'minmax(0, 1fr) 360px',
           gap: 20,
           alignItems: 'start',
-        }}
-      >
-        <section
-          style={{
-            background: T.surface,
-            border: `1px solid ${T.border}`,
-            borderRadius: 14,
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              gap: 18,
-              overflowX: 'auto',
-              paddingBottom: 8,
-              borderBottom: `1px solid ${T.border}`,
-            }}
-          >
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                className={`conference-tab${activeTab === tab ? ' active' : ''}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+        }}>
+          {/* ── Left: Team grid ── */}
+          <section style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: 18,
+          }}>
+            {/* Header */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: C.gold, letterSpacing: 3, fontWeight: 700, marginBottom: 4 }}>
+                NFL DRAFT — SELECT YOUR FRANCHISE
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: C.txt, marginBottom: 14 }}>
+                32 Teams · {filteredTeams.length} Shown
+              </div>
+              {/* Division tabs — scrollable */}
+              <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+                <TabBar
+                  tabs={tabItems}
+                  active={activeTab}
+                  onChange={(id) => setActiveTab(id as DivisionTab)}
+                  style={{ width: 'max-content' }}
+                />
+              </div>
+            </div>
 
-          <div
-            style={{
-              marginTop: 14,
+            {/* Team cards grid */}
+            <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))',
               gap: 12,
-            }}
-          >
-            {filteredTeams.map((team) => {
-              const selected = selectedTeam?.abbreviation === team.abbreviation;
-              const selectedBorder = hexToRgba(team.primaryColor, 0.7);
-              const selectedBackground = `linear-gradient(180deg, ${hexToRgba(team.primaryColor, 0.1)} 0%, ${T.panel} 100%)`;
-              const selectedGlow = `0 0 0 1px ${hexToRgba(team.primaryColor, 0.35)}, 0 12px 30px ${hexToRgba(team.primaryColor, 0.3)}`;
-
-              return (
-                <button
+            }}>
+              {filteredTeams.map((team) => (
+                <TeamCard
                   key={team.abbreviation}
-                  type="button"
-                  className={`team-select-card${selected ? ' selected' : ''}`}
-                  style={{
-                    borderColor: selected ? selectedBorder : T.border,
-                    background: selected ? selectedBackground : T.panel,
-                    boxShadow: selected ? selectedGlow : 'none',
-                    textAlign: 'left',
-                  }}
-                  onClick={() => setSelectedAbbreviation(team.abbreviation)}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div
-                      style={{
-                        color: team.primaryColor,
-                        fontSize: 28,
-                        lineHeight: 1,
-                        fontWeight: 800,
-                        fontVariantNumeric: 'tabular-nums',
-                      }}
-                    >
-                      {team.pickNumber}
+                  team={team}
+                  selected={selectedTeam?.abbreviation === team.abbreviation}
+                  onSelect={() => setSelectedAbbreviation(team.abbreviation)}
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* ── Right: Settings + CTA ── */}
+          <aside style={{
+            position: 'sticky',
+            top: 20,
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}>
+            {/* Selected Team Preview */}
+            <div style={{
+              borderRadius: 12,
+              overflow: 'hidden',
+              border: `1px solid ${selectedTeam ? hexToRgba(selectedTeam.primaryColor, 0.5) : C.border}`,
+              background: selectedTeam
+                ? `linear-gradient(135deg, ${hexToRgba(selectedTeam.primaryColor, 0.12)} 0%, ${C.panel} 100%)`
+                : C.panel,
+              padding: 14,
+              position: 'relative',
+              transition: 'border-color 300ms, background 300ms',
+            }}>
+              {selectedTeam && (
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
+                  background: `linear-gradient(90deg, transparent, ${selectedTeam.primaryColor}, transparent)`,
+                }} />
+              )}
+              <div style={sectionLabel}>Selected Team</div>
+              {selectedTeam ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                    <div style={{
+                      filter: `drop-shadow(0 0 12px ${hexToRgba(selectedTeam.primaryColor, 0.6)})`,
+                    }}>
+                      <img
+                        src={teamLogoUrl(selectedTeam.abbreviation)}
+                        alt={`${selectedTeam.city} ${selectedTeam.name} logo`}
+                        style={{ width: 56, height: 56, objectFit: 'contain' }}
+                      />
                     </div>
-                    <div style={{ color: T.txtSub, fontSize: 12, fontWeight: 600 }}>{team.abbreviation}</div>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: C.txt }}>
+                        {selectedTeam.city} {selectedTeam.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.txtSub, marginTop: 2 }}>
+                        {selectedTeam.record} · Pick #{selectedTeam.pickNumber}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.txtSub }}>
+                        {selectedTeam.conference} {selectedTeam.division}
+                      </div>
+                    </div>
                   </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 56 }}>
-                    <img className="team-logo" src={teamLogoUrl(team.abbreviation)} alt={`${team.city} ${team.name} logo`} />
-                  </div>
-
                   <div>
-                    <div style={{ color: T.txt, fontSize: 12, fontWeight: 600 }}>
-                      {team.city} {team.name}
-                    </div>
-                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {team.needs.slice(0, 3).map((need) => (
+                    <div style={{ ...sectionLabel, marginBottom: 6 }}>Top 5 Needs</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {selectedTeam.needs.slice(0, 5).map((need) => (
                         <span
-                          key={`${team.abbreviation}-${need}`}
+                          key={`${selectedTeam.abbreviation}-preview-${need}`}
                           style={{
                             fontSize: 10,
-                            fontWeight: 700,
-                            letterSpacing: '0.04em',
-                            textTransform: 'uppercase',
-                            color: team.primaryColor,
-                            background: hexToRgba(team.primaryColor, 0.12),
-                            border: `1px solid ${hexToRgba(team.primaryColor, 0.35)}`,
+                            fontWeight: 800,
+                            color: selectedTeam.primaryColor,
+                            background: hexToRgba(selectedTeam.primaryColor, 0.12),
+                            border: `1px solid ${hexToRgba(selectedTeam.primaryColor, 0.4)}`,
                             borderRadius: 999,
-                            padding: '3px 7px',
+                            padding: '3px 8px',
+                            letterSpacing: '0.05em',
+                            textTransform: 'uppercase' as const,
                           }}
                         >
                           {need}
@@ -349,289 +437,233 @@ export default function TeamSelectPage({ draftStore, onStart }: TeamSelectPagePr
                       ))}
                     </div>
                   </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <aside
-          style={{
-            width: 340,
-            position: 'sticky',
-            top: 20,
-            background: T.surface,
-            border: `1px solid ${T.border}`,
-            borderRadius: 14,
-            padding: 14,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-          }}
-        >
-          <div>
-            <div style={sectionLabelStyle}>Draft Class</div>
-            <div style={inputCardStyle}>
-              <select
-                value={draftClass}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setDraftClass(next);
-                  updateDraftStoreSetting(draftStore, 'draftClass', next);
-                }}
-                style={{
-                  width: '100%',
-                  background: T.elevated,
-                  border: `1px solid ${T.borderHi}`,
-                  borderRadius: 8,
-                  color: T.txt,
-                  fontSize: 13,
-                  padding: '9px 10px',
-                  outline: 'none',
-                }}
-              >
-                <option value="2025">2025</option>
-                <option value="2026">2026</option>
-                <option value="2027">2027</option>
-                <option value="Historic Mix">Historic Mix</option>
-              </select>
+                </>
+              ) : (
+                <div style={{ color: C.txtSub, fontSize: 12, fontStyle: 'italic' }}>
+                  Select a team to preview front-office context.
+                </div>
+              )}
             </div>
-          </div>
 
-          <div>
-            <div style={sectionLabelStyle}>Rounds ({rounds})</div>
-            <div style={inputCardStyle}>
-              <input
-                type="range"
-                min={1}
-                max={7}
-                value={rounds}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setRounds(next);
-                  updateDraftStoreSetting(draftStore, 'rounds', next);
-                }}
-                style={{ width: '100%', accentColor: T.blueBright }}
-              />
-            </div>
-          </div>
-
-          <div>
-            <div style={sectionLabelStyle}>Simulation Speed ({simulationSpeed})</div>
-            <div style={inputCardStyle}>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={simulationSpeed}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setSimulationSpeed(next);
-                  updateDraftStoreSetting(draftStore, 'simulationSpeed', next);
-                }}
-                style={{ width: '100%', accentColor: T.green }}
-              />
-            </div>
-          </div>
-
-          <div>
-            <div style={sectionLabelStyle}>BPA vs Needs ({bpaNeedsBalance}/{100 - bpaNeedsBalance})</div>
-            <div style={inputCardStyle}>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={bpaNeedsBalance}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setBpaNeedsBalance(next);
-                  updateDraftStoreSetting(draftStore, 'bpaNeedsBalance', next);
-                }}
-                style={{ width: '100%', accentColor: T.blue }}
-              />
-            </div>
-          </div>
-
-          <div>
-            <div style={sectionLabelStyle}>Position Weight ({positionWeight})</div>
-            <div style={inputCardStyle}>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={positionWeight}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setPositionWeight(next);
-                  updateDraftStoreSetting(draftStore, 'positionWeight', next);
-                }}
-                style={{ width: '100%', accentColor: T.green }}
-              />
-            </div>
-          </div>
-
-          <div>
-            <div style={sectionLabelStyle}>AI Advisor</div>
-            <div style={{ ...inputCardStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ color: aiAdvisorEnabled ? T.green : T.txtSub, fontSize: 12, fontWeight: 600 }}>
-                {aiAdvisorEnabled ? 'ENABLED' : 'DISABLED'}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !aiAdvisorEnabled;
-                  setAiAdvisorEnabled(next);
-                  updateDraftStoreSetting(draftStore, 'aiAdvisorEnabled', next);
-                }}
-                style={{
-                  width: 44,
-                  height: 24,
-                  borderRadius: 999,
-                  border: `1px solid ${aiAdvisorEnabled ? hexToRgba(T.green, 0.65) : T.borderHi}`,
-                  background: aiAdvisorEnabled ? hexToRgba(T.green, 0.2) : T.elevated,
-                  position: 'relative',
-                  cursor: 'pointer',
-                  transition: 'background 160ms ease, border-color 160ms ease',
-                }}
-                aria-label="Toggle AI advisor"
-                aria-pressed={aiAdvisorEnabled}
-              >
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 2,
-                    left: aiAdvisorEnabled ? 22 : 2,
-                    width: 18,
-                    height: 18,
-                    borderRadius: '50%',
-                    background: aiAdvisorEnabled ? T.green : T.txtSub,
-                    transition: 'left 160ms ease',
+            {/* Draft Settings */}
+            <div>
+              <div style={sectionLabel}>Draft Class</div>
+              <div style={inputCard}>
+                <select
+                  value={draftClass}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setDraftClass(next);
+                    updateDraftStoreSetting(draftStore, 'draftClass', next);
                   }}
-                />
-              </button>
+                  style={{
+                    width: '100%',
+                    background: C.elevated,
+                    border: `1px solid ${C.borderHi}`,
+                    borderRadius: 8,
+                    color: C.txt,
+                    fontSize: 13,
+                    padding: '9px 10px',
+                    outline: 'none',
+                    fontFamily: C.font,
+                  }}
+                >
+                  <option value="2025">2025</option>
+                  <option value="2026">2026</option>
+                  <option value="2027">2027</option>
+                  <option value="Historic Mix">Historic Mix</option>
+                </select>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <div style={sectionLabelStyle}>Draft Craziness ({draftCraziness})</div>
-            <div style={inputCardStyle}>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={draftCraziness}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setDraftCraziness(next);
-                  updateDraftStoreSetting(draftStore, 'draftCraziness', next);
-                }}
-                style={{ width: '100%', accentColor: T.amber }}
-              />
-              <div
-                style={{
+            <div>
+              <div style={sectionLabel}>Rounds ({rounds})</div>
+              <div style={inputCard}>
+                <input
+                  type="range"
+                  min={1}
+                  max={7}
+                  value={rounds}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setRounds(next);
+                    updateDraftStoreSetting(draftStore, 'rounds', next);
+                  }}
+                  style={{ width: '100%', accentColor: C.blueBright }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div style={sectionLabel}>Simulation Speed ({simulationSpeed})</div>
+              <div style={inputCard}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={simulationSpeed}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setSimulationSpeed(next);
+                    updateDraftStoreSetting(draftStore, 'simulationSpeed', next);
+                  }}
+                  style={{ width: '100%', accentColor: C.green }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div style={sectionLabel}>BPA vs Needs ({bpaNeedsBalance}/{100 - bpaNeedsBalance})</div>
+              <div style={inputCard}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={bpaNeedsBalance}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setBpaNeedsBalance(next);
+                    updateDraftStoreSetting(draftStore, 'bpaNeedsBalance', next);
+                  }}
+                  style={{ width: '100%', accentColor: C.blue }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div style={sectionLabel}>Position Weight ({positionWeight})</div>
+              <div style={inputCard}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={positionWeight}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setPositionWeight(next);
+                    updateDraftStoreSetting(draftStore, 'positionWeight', next);
+                  }}
+                  style={{ width: '100%', accentColor: C.green }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div style={sectionLabel}>AI Advisor</div>
+              <div style={{
+                ...inputCard,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <span style={{ color: aiAdvisorEnabled ? C.green : C.txtSub, fontSize: 12, fontWeight: 700 }}>
+                  {aiAdvisorEnabled ? 'ENABLED' : 'DISABLED'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !aiAdvisorEnabled;
+                    setAiAdvisorEnabled(next);
+                    updateDraftStoreSetting(draftStore, 'aiAdvisorEnabled', next);
+                  }}
+                  style={{
+                    width: 44,
+                    height: 24,
+                    borderRadius: 999,
+                    border: `1px solid ${aiAdvisorEnabled ? hexToRgba(C.green, 0.65) : C.borderHi}`,
+                    background: aiAdvisorEnabled ? hexToRgba(C.green, 0.2) : C.elevated,
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background 160ms ease, border-color 160ms ease',
+                  }}
+                  aria-label="Toggle AI advisor"
+                  aria-pressed={aiAdvisorEnabled}
+                >
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      left: aiAdvisorEnabled ? 22 : 2,
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: aiAdvisorEnabled ? C.green : C.txtSub,
+                      transition: 'left 160ms ease',
+                    }}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div style={sectionLabel}>Draft Craziness ({draftCraziness})</div>
+              <div style={inputCard}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={draftCraziness}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setDraftCraziness(next);
+                    updateDraftStoreSetting(draftStore, 'draftCraziness', next);
+                  }}
+                  style={{ width: '100%', accentColor: C.amber }}
+                />
+                <div style={{
                   marginTop: 6,
                   fontSize: 10,
-                  color: T.txtSub,
+                  color: C.txtSub,
                   letterSpacing: '0.08em',
                   fontWeight: 700,
                   display: 'flex',
                   justifyContent: 'space-between',
-                }}
-              >
-                <span>QUIET</span>
-                <span>← →</span>
-                <span>CHAOS</span>
+                }}>
+                  <span>QUIET</span>
+                  <span>← →</span>
+                  <span>CHAOS</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div
-            style={{
-              marginTop: 4,
-              border: `1px solid ${T.border}`,
-              borderRadius: 12,
-              background: T.panel,
-              padding: 12,
-            }}
-          >
-            <div style={sectionLabelStyle}>Selected Team</div>
-            {selectedTeam ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <img
-                    src={teamLogoUrl(selectedTeam.abbreviation)}
-                    alt={`${selectedTeam.city} ${selectedTeam.name} logo`}
-                    style={{ width: 46, height: 46, objectFit: 'contain' }}
-                  />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: T.txt }}>
-                      {selectedTeam.city} {selectedTeam.name}
-                    </div>
-                    <div style={{ fontSize: 11, color: T.txtSub, marginTop: 2 }}>
-                      {selectedTeam.record} | Pick #{selectedTeam.pickNumber}
-                    </div>
-                    <div style={{ fontSize: 11, color: T.txtSub }}>
-                      {selectedTeam.conference} {selectedTeam.division}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ ...sectionLabelStyle, marginBottom: 6 }}>Top 5 Needs</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {selectedTeam.needs.slice(0, 5).map((need) => (
-                      <span
-                        key={`${selectedTeam.abbreviation}-preview-${need}`}
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          color: selectedTeam.primaryColor,
-                          background: hexToRgba(selectedTeam.primaryColor, 0.12),
-                          border: `1px solid ${hexToRgba(selectedTeam.primaryColor, 0.35)}`,
-                          borderRadius: 999,
-                          padding: '3px 7px',
-                          letterSpacing: '0.04em',
-                        }}
-                      >
-                        {need}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ color: T.txtSub, fontSize: 12 }}>Select a team to preview front-office context.</div>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedTeam && onStart) onStart(selectedTeam);
-            }}
-            disabled={!selectedTeam}
-            style={{
-              marginTop: 2,
-              width: '100%',
-              height: 48,
-              borderRadius: 10,
-              border: `1px solid ${selectedTeam ? hexToRgba(selectedTeam.primaryColor, 0.8) : T.borderHi}`,
-              background: selectedTeam
-                ? `linear-gradient(135deg, ${hexToRgba(selectedTeam.primaryColor, 0.95)} 0%, ${hexToRgba(selectedTeam.primaryColor, 0.75)} 100%)`
-                : T.elevated,
-              color: selectedTeam ? T.txtInvert : T.txtSub,
-              fontSize: 14,
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              cursor: selectedTeam ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {selectedTeam ? `ENTER WAR ROOM AS ${selectedTeam.abbreviation} →` : 'SELECT A TEAM TO CONTINUE'}
-          </button>
-        </aside>
-      </div>
-    </div>
+            {/* CTA */}
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedTeam && onStart) onStart(selectedTeam);
+              }}
+              disabled={!selectedTeam}
+              style={{
+                marginTop: 4,
+                width: '100%',
+                height: 52,
+                borderRadius: 12,
+                border: `1px solid ${selectedTeam ? hexToRgba(selectedTeam.primaryColor, 0.8) : C.borderHi}`,
+                background: selectedTeam
+                  ? `linear-gradient(135deg, ${hexToRgba(selectedTeam.primaryColor, 0.95)} 0%, ${hexToRgba(selectedTeam.primaryColor, 0.75)} 100%)`
+                  : C.elevated,
+                color: selectedTeam ? '#fff' : C.txtSub,
+                fontSize: 14,
+                fontWeight: 800,
+                textTransform: 'uppercase' as const,
+                letterSpacing: '0.06em',
+                cursor: selectedTeam ? 'pointer' : 'not-allowed',
+                transition: 'all 200ms',
+                boxShadow: selectedTeam
+                  ? `0 4px 24px ${hexToRgba(selectedTeam.primaryColor, 0.4)}`
+                  : 'none',
+                fontFamily: C.font,
+              }}
+            >
+              {selectedTeam ? `ENTER WAR ROOM AS ${selectedTeam.abbreviation} →` : 'SELECT A TEAM TO CONTINUE'}
+            </button>
+          </aside>
+        </div>
+      </AppShell>
+    </>
   );
+}
+
+export default function TeamSelectPage(props: TeamSelectPageProps) {
+  return <TeamSelectPageInner {...props} />;
 }
 
 export { TeamSelectPage };

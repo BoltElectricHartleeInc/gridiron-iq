@@ -3,10 +3,163 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NFL_GAME_TEAMS, NCAA_GAME_TEAMS } from '../game/teams';
 import type { GameTeam } from '../game/teams';
+import { AppShell, C, GLOBAL_CSS } from '../components/AppShell';
 
 type League = 'nfl' | 'ncaa';
 
 function hexStr(hex: number) { return `#${hex.toString(16).padStart(6, '0')}`; }
+
+// ESPN CDN slug map for NFL teams
+const ESPN_SLUG: Record<string, string> = {
+  ari: 'ari', atl: 'atl', bal: 'bal', buf: 'buf', car: 'car',
+  chi: 'chi', cin: 'cin', cle: 'cle', dal: 'dal', den: 'den',
+  det: 'det', gb: 'gb',  hou: 'hou', ind: 'ind', jax: 'jax',
+  kc: 'kc',  lac: 'lac', lar: 'lar', lv: 'lv',  mia: 'mia',
+  min: 'min', ne: 'ne',  no: 'no',   nyg: 'nyg', nyj: 'nyj',
+  phi: 'phi', pit: 'pit', sea: 'sea', sf: 'sf',  tb: 'tb',
+  ten: 'ten', was: 'wsh',
+};
+
+function teamLogo(team: GameTeam) {
+  if (team.league !== 'nfl') return null;
+  const slug = ESPN_SLUG[team.id] ?? team.id;
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${slug}.png`;
+}
+
+function TeamAvatar({ team, size = 48 }: { team: GameTeam; size?: number }) {
+  const primary = hexStr(team.primaryColor);
+  const logo = teamLogo(team);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: `${primary}18`, border: `1px solid ${primary}50`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden', flexShrink: 0,
+    }}>
+      {logo ? (
+        <img
+          src={logo}
+          alt={team.abbreviation}
+          style={{ width: size * 0.72, height: size * 0.72, objectFit: 'contain' }}
+          onError={e => {
+            const el = e.currentTarget as HTMLImageElement;
+            el.style.display = 'none';
+            const parent = el.parentElement;
+            if (parent) {
+              parent.style.background = primary;
+              parent.innerHTML = `<span style="font-size:${size * 0.22}px;font-weight:900;color:#fff;font-family:Impact,sans-serif">${team.abbreviation.slice(0, 3)}</span>`;
+            }
+          }}
+        />
+      ) : (
+        <span style={{
+          fontSize: size * 0.22, fontWeight: 900, color: '#fff',
+          fontFamily: 'Impact, sans-serif',
+          background: primary,
+          width: '100%', height: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: '50%',
+        }}>
+          {team.abbreviation.slice(0, 3)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function TeamSlot({
+  team, label, active, onClick, side,
+}: {
+  team: GameTeam | null;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  side: 'left' | 'right';
+}) {
+  const primary = team ? hexStr(team.primaryColor) : C.border;
+  const isLeft = side === 'left';
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        borderRadius: 18,
+        border: `1px solid ${active ? (team ? primary + '70' : C.borderFoc) : C.border}`,
+        padding: '22px 16px',
+        textAlign: 'center',
+        cursor: 'pointer',
+        position: 'relative',
+        overflow: 'hidden',
+        background: team
+          ? `linear-gradient(${isLeft ? '135deg' : '225deg'}, ${primary}14 0%, ${C.surface} 55%)`
+          : C.surface,
+        transition: 'border-color 200ms, box-shadow 200ms',
+        boxShadow: active
+          ? `0 0 28px ${team ? primary + '28' : C.blueFoc}`
+          : 'none',
+      }}
+    >
+      {/* Gradient wash */}
+      {team && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: `linear-gradient(${isLeft ? '135deg' : '225deg'}, ${primary}0A 0%, transparent 50%)`,
+          pointerEvents: 'none',
+        }} />
+      )}
+      {/* Active indicator bar */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0, left: 0, right: 0, height: 2,
+        background: active
+          ? `linear-gradient(90deg, ${team ? primary : C.blueBright}, transparent)`
+          : 'transparent',
+        transition: 'background 200ms',
+      }} />
+
+      <div style={{ position: 'relative' }}>
+        <div style={{
+          fontSize: 9, fontWeight: 800, letterSpacing: '.18em',
+          color: active ? (team ? primary : C.blueBright) : C.txtMuted,
+          textTransform: 'uppercase', marginBottom: 14,
+          transition: 'color 200ms',
+        }}>
+          {label}
+        </div>
+
+        {team ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+              <TeamAvatar team={team} size={64} />
+            </div>
+            <div style={{
+              fontSize: 13, fontWeight: 700, color: C.txt, lineHeight: 1.2, marginBottom: 2,
+            }}>
+              {team.city}
+            </div>
+            <div style={{ fontSize: 11, color: C.txtSub }}>{team.name}</div>
+          </>
+        ) : (
+          <>
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%',
+              border: `2px dashed ${active ? C.borderFoc : C.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 10px',
+              fontSize: 22, color: active ? C.txtSub : C.txtMuted,
+              transition: 'border-color 200ms, color 200ms',
+            }}>
+              ?
+            </div>
+            <div style={{ fontSize: 12, color: active ? C.txtSub : C.txtMuted, fontWeight: 600, transition: 'color 200ms' }}>
+              {active ? 'Click a team below' : 'Not selected'}
+            </div>
+          </>
+        )}
+      </div>
+    </button>
+  );
+}
 
 export function GameSelectPage() {
   const navigate = useNavigate();
@@ -16,241 +169,400 @@ export function GameSelectPage() {
   const [picking, setPicking] = useState<'home' | 'away'>('home');
 
   const teams = league === 'nfl' ? NFL_GAME_TEAMS : NCAA_GAME_TEAMS;
-  const canPlay = home && away;
+  const canPlay = !!(home && away);
 
   const handleTeam = (team: GameTeam) => {
     if (picking === 'home') { setHome(team); setPicking('away'); }
     else { if (team.id === home?.id) return; setAway(team); }
   };
 
+  const homePrimary = home ? hexStr(home.primaryColor) : C.blueBright;
+  const awayPrimary = away ? hexStr(away.primaryColor) : C.red;
+
   return (
-    <div className="min-h-screen bg-[#080810] relative overflow-hidden">
-      {/* Background glow */}
-      <div className="absolute top-0 left-1/3 w-72 h-72 bg-blue-600/8 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 right-1/3 w-72 h-72 bg-green-600/8 rounded-full blur-3xl pointer-events-none" />
+    <AppShell title="Exhibition" backTo="/game" noPad={true}>
+      <style>{GLOBAL_CSS}</style>
 
-      <div className="relative z-10 max-w-3xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <button
-            onClick={() => navigate('/game')}
-            className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm"
-          >
-            ←
-          </button>
-          <div>
-            <h1 className="text-2xl font-black text-white tracking-tight" style={{ fontFamily: 'Impact, sans-serif' }}>
-              ARCADE FOOTBALL
-            </h1>
-            <p className="text-white/30 text-xs tracking-widest uppercase">Select League & Teams</p>
-          </div>
-        </div>
+      <div style={{
+        minHeight: 'calc(100vh - 56px)',
+        background: C.bg,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Ambient glows */}
+        <div style={{
+          position: 'absolute', top: -60, left: '20%',
+          width: 400, height: 400,
+          background: `radial-gradient(circle, ${homePrimary}12 0%, transparent 70%)`,
+          borderRadius: '50%', pointerEvents: 'none',
+          transition: 'background 600ms',
+        }} />
+        <div style={{
+          position: 'absolute', top: -60, right: '20%',
+          width: 400, height: 400,
+          background: `radial-gradient(circle, ${awayPrimary}12 0%, transparent 70%)`,
+          borderRadius: '50%', pointerEvents: 'none',
+          transition: 'background 600ms',
+        }} />
 
-        {/* League toggle */}
-        <div className="flex gap-1 mb-8 bg-white/5 border border-white/8 rounded-xl p-1 w-fit">
-          {(['nfl', 'ncaa'] as League[]).map(l => (
-            <button
-              key={l}
-              onClick={() => { setLeague(l); setHome(null); setAway(null); setPicking('home'); }}
-              className={`relative px-8 py-2 rounded-lg font-black text-sm tracking-widest transition-all ${
-                league === l ? 'text-white' : 'text-white/30 hover:text-white/60'
-              }`}
-              style={{ fontFamily: 'Impact, sans-serif' }}
-            >
-              {league === l && (
-                <motion.div
-                  layoutId="leagueTab"
-                  className="absolute inset-0 rounded-lg"
-                  style={{ background: l === 'nfl' ? 'linear-gradient(135deg,#013369,#0a4a9a)' : 'linear-gradient(135deg,#5a0000,#8B0000)' }}
-                />
-              )}
-              <span className="relative z-10">{l.toUpperCase()}</span>
-            </button>
-          ))}
-        </div>
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 820, margin: '0 auto', padding: '40px 24px 64px' }}>
 
-        {/* VS Display */}
-        <div className="flex items-center gap-4 mb-8">
-          <TeamSlot team={home} label="HOME" active={picking === 'home'} onClick={() => setPicking('home')} side="left" />
-          <div className="flex flex-col items-center gap-1">
-            <div className="text-white/20 text-2xl font-black" style={{ fontFamily: 'Impact, sans-serif' }}>VS</div>
-            {canPlay && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="text-xs text-green-400/60 uppercase tracking-wider"
-              >
-                Ready
-              </motion.div>
-            )}
-          </div>
-          <TeamSlot team={away} label="AWAY" active={picking === 'away'} onClick={() => setPicking('away')} side="right" />
-        </div>
-
-        {/* Select prompt */}
-        <p className="text-white/20 text-xs uppercase tracking-[0.3em] mb-4">
-          {picking === 'home' ? '← Select Home Team' : '← Select Away Team'}
-        </p>
-
-        {/* Team grid */}
-        <div className="grid grid-cols-4 gap-2 mb-6">
-          {teams.map(team => {
-            const isHome = home?.id === team.id;
-            const isAway = away?.id === team.id;
-            const disabled = picking === 'away' && isHome;
-            return (
-              <motion.button
-                key={team.id}
-                whileHover={!disabled ? { scale: 1.04 } : {}}
-                whileTap={!disabled ? { scale: 0.96 } : {}}
-                onClick={() => !disabled && handleTeam(team)}
-                className={`relative p-3 rounded-xl border transition-all text-left overflow-hidden ${
-                  isHome ? 'border-blue-500/60' :
-                  isAway ? 'border-red-500/60' :
-                  'border-white/5 hover:border-white/15'
-                } ${disabled ? 'opacity-25 cursor-not-allowed' : 'cursor-pointer'}`}
-                style={{
-                  background: isHome
-                    ? `linear-gradient(135deg, ${hexStr(team.primaryColor)}22, #050515)`
-                    : isAway
-                    ? `linear-gradient(135deg, ${hexStr(team.primaryColor)}22, #150505)`
-                    : '#0d0d1a',
-                }}
-              >
-                {/* Subtle color wash */}
-                {(isHome || isAway) && (
-                  <div
-                    className="absolute inset-0 opacity-10 rounded-xl"
-                    style={{ background: hexStr(team.primaryColor) }}
-                  />
-                )}
-
-                <div className="relative flex flex-col items-center gap-1.5">
-                  {/* Team helmet circle */}
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center font-black text-white text-xs shadow-lg"
+          {/* ── League toggle ── */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 36 }}>
+            <div style={{
+              display: 'flex', gap: 4,
+              background: C.panel, border: `1px solid ${C.border}`,
+              borderRadius: 12, padding: 4,
+            }}>
+              {(['nfl', 'ncaa'] as League[]).map(l => {
+                const isActive = league === l;
+                return (
+                  <button
+                    key={l}
+                    onClick={() => {
+                      setLeague(l);
+                      setHome(null); setAway(null); setPicking('home');
+                    }}
                     style={{
-                      background: `radial-gradient(circle at 35% 35%, ${hexStr(team.primaryColor)}ff, ${hexStr(team.primaryColor)}99)`,
-                      boxShadow: `0 0 20px ${hexStr(team.primaryColor)}44`,
+                      position: 'relative',
+                      padding: '10px 36px',
+                      borderRadius: 9,
+                      border: isActive ? `1px solid ${C.borderHi}` : '1px solid transparent',
+                      background: isActive
+                        ? l === 'nfl'
+                          ? 'linear-gradient(135deg, #01245A, #0a4a9a)'
+                          : 'linear-gradient(135deg, #5a0000, #8B0000)'
+                        : 'transparent',
+                      color: isActive ? '#fff' : C.txtMuted,
+                      cursor: 'pointer',
+                      fontSize: 13, fontWeight: 800, letterSpacing: '.12em',
+                      fontFamily: 'Impact, sans-serif',
+                      transition: 'all 180ms ease',
+                      boxShadow: isActive ? `0 2px 18px ${l === 'nfl' ? '#0a4a9a' : '#8B0000'}40` : 'none',
+                    }}
+                    onMouseEnter={e => {
+                      if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = C.txt;
+                    }}
+                    onMouseLeave={e => {
+                      if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = C.txtMuted;
                     }}
                   >
-                    {team.abbreviation.slice(0, 3)}
+                    {l.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── VS screen ── */}
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, marginBottom: 36 }}>
+            <TeamSlot
+              team={home} label="HOME"
+              active={picking === 'home'}
+              onClick={() => setPicking('home')}
+              side="left"
+            />
+
+            {/* VS center */}
+            <div style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: 8,
+              minWidth: 56, flexShrink: 0,
+            }}>
+              <div style={{
+                fontSize: 28, fontWeight: 900, fontFamily: 'Impact, sans-serif',
+                color: canPlay ? C.txt : C.txtMuted,
+                letterSpacing: '.06em',
+                textShadow: canPlay ? `0 0 28px ${C.txt}40` : 'none',
+                transition: 'color 300ms, text-shadow 300ms',
+              }}>
+                VS
+              </div>
+              <AnimatePresence>
+                {canPlay && (
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    style={{
+                      fontSize: 9, fontWeight: 800, letterSpacing: '.14em',
+                      color: C.green, textTransform: 'uppercase',
+                    }}
+                  >
+                    Ready
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <TeamSlot
+              team={away} label="AWAY"
+              active={picking === 'away'}
+              onClick={() => setPicking('away')}
+              side="right"
+            />
+          </div>
+
+          {/* ── Selecting prompt ── */}
+          <p style={{
+            fontSize: 10, fontWeight: 800, letterSpacing: '.2em', color: C.txtMuted,
+            textTransform: 'uppercase', textAlign: 'center', marginBottom: 18,
+          }}>
+            {picking === 'home' ? '↓ Select Home Team' : '↓ Select Away Team'}
+          </p>
+
+          {/* ── Team grid ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 24 }}>
+            {teams.map(team => {
+              const isHome    = home?.id === team.id;
+              const isAway    = away?.id === team.id;
+              const disabled  = picking === 'away' && isHome;
+              const primary   = hexStr(team.primaryColor);
+              const logo      = teamLogo(team);
+              const isSelected = isHome || isAway;
+
+              return (
+                <button
+                  key={team.id}
+                  onClick={() => !disabled && handleTeam(team)}
+                  disabled={disabled}
+                  style={{
+                    position: 'relative',
+                    padding: '12px 8px',
+                    borderRadius: 12,
+                    border: `1px solid ${
+                      isHome ? C.blueBright + '70'
+                      : isAway ? C.red + '70'
+                      : C.border
+                    }`,
+                    background: isSelected
+                      ? `linear-gradient(135deg, ${primary}1A, ${C.surface})`
+                      : C.surface,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.25 : 1,
+                    overflow: 'hidden',
+                    transition: 'all 160ms ease',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  }}
+                  onMouseEnter={e => {
+                    if (disabled) return;
+                    const el = e.currentTarget as HTMLButtonElement;
+                    el.style.borderColor = primary + '80';
+                    el.style.transform = 'translateY(-2px)';
+                    el.style.boxShadow = `0 6px 24px ${primary}24`;
+                  }}
+                  onMouseLeave={e => {
+                    const el = e.currentTarget as HTMLButtonElement;
+                    el.style.borderColor = isHome ? C.blueBright + '70' : isAway ? C.red + '70' : C.border;
+                    el.style.transform = '';
+                    el.style.boxShadow = '';
+                  }}
+                >
+                  {/* Gradient overlay */}
+                  {isSelected && (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      background: `linear-gradient(135deg, ${primary}10 0%, transparent 55%)`,
+                      pointerEvents: 'none',
+                    }} />
+                  )}
+                  {/* Bottom accent */}
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: 2,
+                    background: isHome
+                      ? `linear-gradient(90deg, ${C.blueBright}, transparent)`
+                      : isAway
+                      ? `linear-gradient(90deg, ${C.red}, transparent)`
+                      : 'transparent',
+                  }} />
+
+                  {/* Logo */}
+                  <div style={{
+                    position: 'relative',
+                    width: 44, height: 44, borderRadius: '50%',
+                    background: isSelected ? `${primary}20` : C.panel,
+                    border: `1px solid ${isSelected ? primary + '60' : C.border}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden', flexShrink: 0,
+                    boxShadow: isSelected ? `0 0 16px ${primary}40` : 'none',
+                  }}>
+                    {logo ? (
+                      <img
+                        src={logo}
+                        alt={team.abbreviation}
+                        style={{ width: 32, height: 32, objectFit: 'contain' }}
+                        onError={e => {
+                          const el = e.currentTarget as HTMLImageElement;
+                          el.style.display = 'none';
+                          const parent = el.parentElement;
+                          if (parent) {
+                            parent.style.background = primary;
+                            parent.innerHTML = `<span style="font-size:10px;font-weight:900;color:#fff;font-family:Impact,sans-serif">${team.abbreviation.slice(0,3)}</span>`;
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span style={{
+                        fontSize: 10, fontWeight: 900, color: '#fff',
+                        fontFamily: 'Impact, sans-serif',
+                        background: primary,
+                        width: '100%', height: '100%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        borderRadius: '50%',
+                      }}>
+                        {team.abbreviation.slice(0, 3)}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="text-center">
-                    <div className="text-white text-xs font-semibold leading-tight">{team.city}</div>
-                    <div className="text-white/40 text-xs leading-tight">{team.name}</div>
+                  {/* Name */}
+                  <div style={{ position: 'relative', textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.txt, lineHeight: 1.2 }}>{team.city}</div>
+                    <div style={{ fontSize: 10, color: C.txtSub, lineHeight: 1.2 }}>{team.name}</div>
                   </div>
 
+                  {/* Home/Away badge */}
                   {(isHome || isAway) && (
-                    <div
-                      className={`text-xs font-black tracking-widest px-2 py-0.5 rounded-full ${
-                        isHome ? 'text-blue-400 bg-blue-400/10' : 'text-red-400 bg-red-400/10'
-                      }`}
-                      style={{ fontFamily: 'Impact, sans-serif', fontSize: '9px' }}
-                    >
+                    <div style={{
+                      position: 'relative',
+                      fontSize: 8, fontWeight: 800, letterSpacing: '.14em',
+                      color: isHome ? C.blueBright : C.red,
+                      background: isHome ? C.blueSub : C.redSub,
+                      border: `1px solid ${isHome ? C.blueBright + '30' : C.red + '30'}`,
+                      borderRadius: 999, padding: '2px 8px',
+                      textTransform: 'uppercase',
+                    }}>
                       {isHome ? 'HOME' : 'AWAY'}
                     </div>
                   )}
-                </div>
-              </motion.button>
-            );
-          })}
-        </div>
-
-        {/* Ratings bar */}
-        <AnimatePresence>
-          {canPlay && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="bg-white/3 border border-white/8 rounded-xl p-4 mb-4"
-            >
-              <div className="grid grid-cols-3 gap-y-2 text-center text-sm">
-                {[
-                  ['Offense', home!.offenseRating, away!.offenseRating],
-                  ['Defense', home!.defenseRating, away!.defenseRating],
-                  ['Speed', home!.speedRating, away!.speedRating],
-                ].map(([label, h, a]) => (
-                  <>
-                    <div key={`h-${label}`} className="font-black text-blue-400" style={{ fontFamily: 'Impact, sans-serif' }}>{h}</div>
-                    <div key={`l-${label}`} className="text-white/25 text-xs uppercase tracking-wider self-center">{label}</div>
-                    <div key={`a-${label}`} className="font-black text-red-400" style={{ fontFamily: 'Impact, sans-serif' }}>{a}</div>
-                  </>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Kickoff button */}
-        <motion.button
-          whileHover={canPlay ? { scale: 1.02 } : {}}
-          whileTap={canPlay ? { scale: 0.98 } : {}}
-          onClick={() => canPlay && navigate(`/game/play?home=${home!.id}&away=${away!.id}&league=${league}`)}
-          disabled={!canPlay}
-          className="w-full py-4 rounded-xl font-black text-lg tracking-widest transition-all relative overflow-hidden"
-          style={{
-            fontFamily: 'Impact, Arial Narrow, sans-serif',
-            background: canPlay
-              ? 'linear-gradient(135deg, #1a4a1a, #2d7a2d)'
-              : '#0d0d1a',
-            color: canPlay ? '#ffffff' : '#333355',
-            border: canPlay ? '1px solid rgba(45,122,45,0.5)' : '1px solid rgba(255,255,255,0.05)',
-            boxShadow: canPlay ? '0 0 40px rgba(45,150,45,0.25)' : 'none',
-          }}
-        >
-          {canPlay
-            ? `KICKOFF — ${home!.abbreviation} vs ${away!.abbreviation}`
-            : 'SELECT BOTH TEAMS TO PLAY'}
-        </motion.button>
-      </div>
-    </div>
-  );
-}
-
-function TeamSlot({ team, label, active, onClick, side }: {
-  team: GameTeam | null; label: string; active: boolean; onClick: () => void; side: 'left' | 'right';
-}) {
-  function hexStr(hex: number) { return `#${hex.toString(16).padStart(6, '0')}`; }
-  return (
-    <motion.button
-      onClick={onClick}
-      whileHover={{ scale: 1.02 }}
-      className={`flex-1 rounded-2xl border p-4 text-center transition-all relative overflow-hidden ${
-        active ? 'border-white/30' : 'border-white/8'
-      }`}
-      style={{ background: team ? `linear-gradient(135deg, ${hexStr(team.primaryColor)}18, #0a0a18)` : '#0a0a18' }}
-    >
-      {team && (
-        <div
-          className="absolute inset-0 opacity-5"
-          style={{ background: hexStr(team.primaryColor) }}
-        />
-      )}
-      <div className="relative">
-        <div className="text-white/25 text-xs tracking-widest uppercase mb-2">{label}</div>
-        {team ? (
-          <>
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center font-black text-white mx-auto mb-2 text-sm"
-              style={{
-                background: `radial-gradient(circle at 35% 35%, ${hexStr(team.primaryColor)}, ${hexStr(team.primaryColor)}88)`,
-                boxShadow: `0 0 30px ${hexStr(team.primaryColor)}55`,
-              }}
-            >
-              {team.abbreviation.slice(0, 3)}
-            </div>
-            <div className="text-white font-semibold text-sm">{team.city}</div>
-            <div className="text-white/40 text-xs">{team.name}</div>
-          </>
-        ) : (
-          <div className="w-14 h-14 rounded-full border-2 border-dashed border-white/10 mx-auto flex items-center justify-center text-white/15 text-2xl">
-            ?
+                </button>
+              );
+            })}
           </div>
-        )}
+
+          {/* ── Matchup rating bars ── */}
+          <AnimatePresence>
+            {canPlay && home && away && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                style={{
+                  background: C.surface, border: `1px solid ${C.border}`,
+                  borderRadius: 14, padding: '18px 24px', marginBottom: 16,
+                }}
+              >
+                {(
+                  [
+                    ['Offense', home.offenseRating, away.offenseRating],
+                    ['Defense', home.defenseRating, away.defenseRating],
+                    ['Speed',   home.speedRating,   away.speedRating],
+                  ] as [string, number, number][]
+                ).map(([label, h, a]) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                    <span style={{
+                      fontSize: 15, fontWeight: 900, fontFamily: 'Impact, sans-serif',
+                      color: C.blueBright, minWidth: 28, textAlign: 'center',
+                    }}>
+                      {h}
+                    </span>
+                    <div style={{ flex: 1, height: 6, background: C.elevated, borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+                      {/* Home bar fills from center-left */}
+                      <div style={{
+                        position: 'absolute', right: '50%', top: 0, bottom: 0,
+                        width: `${h / 2}%`,
+                        background: `linear-gradient(270deg, ${C.blueBright}, ${C.blueBright}80)`,
+                        borderRadius: '3px 0 0 3px',
+                      }} />
+                      {/* Away bar fills from center-right */}
+                      <div style={{
+                        position: 'absolute', left: '50%', top: 0, bottom: 0,
+                        width: `${a / 2}%`,
+                        background: `linear-gradient(90deg, ${C.red}, ${C.red}80)`,
+                        borderRadius: '0 3px 3px 0',
+                      }} />
+                    </div>
+                    <span style={{
+                      fontSize: 8, fontWeight: 800, letterSpacing: '.14em',
+                      color: C.txtMuted, textTransform: 'uppercase',
+                      minWidth: 44, textAlign: 'center',
+                    }}>
+                      {label}
+                    </span>
+                    <div style={{ flex: 1, height: 6, background: C.elevated, borderRadius: 3, overflow: 'hidden', position: 'relative', transform: 'scaleX(-1)' }}>
+                      <div style={{
+                        position: 'absolute', right: '50%', top: 0, bottom: 0,
+                        width: `${a / 2}%`,
+                        background: `linear-gradient(270deg, ${C.red}, ${C.red}80)`,
+                        borderRadius: '3px 0 0 3px',
+                      }} />
+                    </div>
+                    <span style={{
+                      fontSize: 15, fontWeight: 900, fontFamily: 'Impact, sans-serif',
+                      color: C.red, minWidth: 28, textAlign: 'center',
+                    }}>
+                      {a}
+                    </span>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── KICKOFF button ── */}
+          <button
+            onClick={() => canPlay && home && away && navigate(`/game/play?home=${home.id}&away=${away.id}&league=${league}`)}
+            disabled={!canPlay}
+            style={{
+              width: '100%',
+              padding: '20px 24px',
+              borderRadius: 16,
+              border: canPlay
+                ? `1px solid ${C.green}50`
+                : `1px solid ${C.border}`,
+              background: canPlay
+                ? `linear-gradient(135deg, #0d3d12, #1a6e20)`
+                : C.surface,
+              color: canPlay ? '#fff' : C.txtMuted,
+              cursor: canPlay ? 'pointer' : 'not-allowed',
+              fontSize: 20, fontWeight: 900,
+              fontFamily: 'Impact, Arial Narrow, sans-serif',
+              letterSpacing: '.08em',
+              boxShadow: canPlay ? `0 0 48px ${C.green}28, inset 0 1px 0 rgba(255,255,255,.08)` : 'none',
+              transition: 'all 200ms ease',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+            onMouseEnter={e => {
+              if (!canPlay) return;
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.transform = 'translateY(-2px)';
+              el.style.boxShadow = `0 0 64px ${C.green}40, inset 0 1px 0 rgba(255,255,255,.1)`;
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.transform = '';
+              el.style.boxShadow = canPlay ? `0 0 48px ${C.green}28, inset 0 1px 0 rgba(255,255,255,.08)` : 'none';
+            }}
+          >
+            {/* Shimmer on hover when ready */}
+            {canPlay && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                background: 'linear-gradient(135deg, rgba(255,255,255,0) 40%, rgba(255,255,255,.04) 50%, rgba(255,255,255,0) 60%)',
+                pointerEvents: 'none',
+              }} />
+            )}
+            <span style={{ position: 'relative' }}>
+              {canPlay && home && away
+                ? `KICKOFF → ${home.abbreviation} vs ${away.abbreviation}`
+                : 'SELECT BOTH TEAMS TO PLAY'
+              }
+            </span>
+          </button>
+
+        </div>
       </div>
-    </motion.button>
+    </AppShell>
   );
 }

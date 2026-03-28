@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { AppShell, C, Badge, Btn, SectionHead } from '../components/AppShell';
 import type { GameTeam } from '../game/teams';
 
 // ─── Historical Team Interface ────────────────────────────────────────────────
 
 interface HistoricalTeam extends GameTeam {
-  era: string;                  // e.g. "1985"
-  keyPlayers: string;           // e.g. "Walter Payton · Jim McMahon"
-  badge: string;                // e.g. "SUPER BOWL XX CHAMPIONS"
-  historicalNote: string;       // 1-2 sentence blurb
+  era: string;
+  keyPlayers: string;
+  badge: string;
+  historicalNote: string;
   offenseRating: number;
   defenseRating: number;
   speedRating: number;
@@ -212,22 +213,34 @@ export const HISTORICAL_TEAMS: HistoricalTeam[] = [
   },
 ];
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function hexToCss(hex: number): string {
+  return `#${hex.toString(16).padStart(6, '0')}`;
+}
+
+function ratingColor(v: number): string {
+  if (v >= 95) return C.gold;
+  if (v >= 90) return C.green;
+  if (v >= 85) return C.blueBright;
+  return C.txt;
+}
+
 // ─── Rating Bar ───────────────────────────────────────────────────────────────
 
 function RatingBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="mb-1">
-      <div className="flex justify-between text-xs mb-0.5">
-        <span className="text-gray-500">{label}</span>
-        <span className="font-bold text-white">{value}</span>
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: C.txtSub, letterSpacing: '.08em' }}>{label}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: ratingColor(value) }}>{value}</span>
       </div>
-      <div className="w-full h-1.5 rounded-full bg-gray-800">
+      <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
         <motion.div
-          className="h-full rounded-full"
-          style={{ background: color }}
+          style={{ height: '100%', borderRadius: 2, background: color }}
           initial={{ width: 0 }}
           animate={{ width: `${value}%` }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
+          transition={{ duration: 0.7, ease: 'easeOut' }}
         />
       </div>
     </div>
@@ -243,170 +256,205 @@ interface TeamCardProps {
   onSelect: (role: 'home' | 'away') => void;
 }
 
-function hexToCss(hex: number): string {
-  return `#${hex.toString(16).padStart(6, '0')}`;
-}
-
 function TeamCard({ team, selected, role, onSelect }: TeamCardProps) {
   const primary = hexToCss(team.primaryColor);
   const secondary = hexToCss(team.secondaryColor);
+  const [hovered, setHovered] = useState(false);
+
+  const borderColor = role === 'home' ? C.blueBright
+    : role === 'away' ? C.red
+    : hovered ? C.borderHi : C.border;
+
+  const glowColor = role === 'home' ? `${C.blueBright}40`
+    : role === 'away' ? `${C.red}40`
+    : hovered ? `${primary}30` : 'transparent';
 
   return (
-    <motion.div
-      whileHover={{ scale: 1.02, y: -2 }}
-      whileTap={{ scale: 0.98 }}
-      className={`relative rounded-xl border-2 overflow-hidden cursor-pointer transition-all ${
-        role === 'home'
-          ? 'border-blue-500 ring-2 ring-blue-500/30'
-          : role === 'away'
-          ? 'border-red-500 ring-2 ring-red-500/30'
-          : selected
-          ? 'border-gray-500'
-          : 'border-gray-800 hover:border-gray-600'
-      }`}
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
-        background: `linear-gradient(135deg, ${primary}22 0%, #111827 60%)`,
-        boxShadow: role ? `0 0 20px ${role === 'home' ? '#3b82f688' : '#ef444488'}` : undefined,
+        position: 'relative',
+        background: C.surface,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 16,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'border-color 160ms, box-shadow 160ms, transform 160ms',
+        transform: hovered ? 'translateY(-3px)' : 'none',
+        boxShadow: role ? `0 0 28px -4px ${glowColor}` : hovered ? `0 0 20px -6px ${glowColor}` : 'none',
       }}
     >
-      {/* Color accent bar */}
-      <div
-        className="absolute top-0 left-0 right-0 h-1"
-        style={{ background: `linear-gradient(to right, ${primary}, ${secondary})` }}
-      />
+      {/* Gradient overlay */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: `linear-gradient(135deg, ${primary}18 0%, transparent 55%)`,
+        pointerEvents: 'none',
+      }} />
+      {/* Top accent bar */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+        background: `linear-gradient(90deg, ${primary}, ${secondary})`,
+      }} />
 
       {/* Role badge */}
       {role && (
-        <div className={`absolute top-3 right-3 text-xs font-black px-2 py-0.5 rounded-full ${
-          role === 'home' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white'
-        }`}>
+        <div style={{
+          position: 'absolute', top: 10, right: 10,
+          fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+          padding: '3px 8px', borderRadius: 999,
+          background: role === 'home' ? C.blueBright : C.red,
+          color: '#fff',
+        }}>
           {role.toUpperCase()}
         </div>
       )}
 
-      <div className="p-4 pt-5">
+      <div style={{ padding: '20px 18px 16px' }}>
         {/* Header */}
-        <div className="mb-3">
-          <div
-            className="text-xs font-bold tracking-widest mb-0.5"
-            style={{ color: secondary }}
-          >
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.16em', color: secondary, marginBottom: 2 }}>
             {team.era}
           </div>
-          <div className="text-lg font-black text-white leading-tight">
+          <div style={{ fontSize: 17, fontWeight: 900, color: C.txt, lineHeight: 1.2 }}>
             {team.city.split(' ').slice(1).join(' ')} {team.name}
           </div>
-          <div className="text-xs text-gray-400">{team.keyPlayers}</div>
+          <div style={{ fontSize: 11, color: C.txtSub, marginTop: 3 }}>{team.keyPlayers}</div>
         </div>
 
         {/* Rating bars */}
-        <div className="mb-3">
-          <RatingBar label="OFF" value={team.offenseRating} color="#3b82f6" />
-          <RatingBar label="DEF" value={team.defenseRating} color="#ef4444" />
-          <RatingBar label="SPD" value={team.speedRating}   color="#22c55e" />
+        <div style={{ marginBottom: 12 }}>
+          <RatingBar label="OFFENSE" value={team.offenseRating} color={C.blueBright} />
+          <RatingBar label="DEFENSE" value={team.defenseRating} color={C.red} />
+          <RatingBar label="SPEED"   value={team.speedRating}   color={C.green} />
         </div>
 
         {/* Historical note */}
-        <p className="text-xs text-gray-500 leading-relaxed mb-3 line-clamp-2">
+        <p style={{
+          fontSize: 11, color: C.txtSub, lineHeight: 1.55,
+          marginBottom: 12,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}>
           {team.historicalNote}
         </p>
 
         {/* Badge */}
-        <div
-          className="text-xs font-black tracking-wider px-2 py-1 rounded text-center"
-          style={{ background: `${secondary}22`, color: secondary, borderColor: secondary, border: '1px solid' }}
-        >
-          🏆 {team.badge}
+        <div style={{
+          fontSize: 9, fontWeight: 800, letterSpacing: '.12em',
+          padding: '5px 10px', borderRadius: 6, textAlign: 'center',
+          background: `${secondary}18`,
+          color: secondary,
+          border: `1px solid ${secondary}50`,
+          marginBottom: 12,
+        }}>
+          {team.badge}
         </div>
 
         {/* Select buttons */}
-        <div className="flex gap-2 mt-3">
+        <div style={{ display: 'flex', gap: 6 }}>
           <button
             onClick={e => { e.stopPropagation(); onSelect('home'); }}
-            className={`flex-1 text-xs py-1.5 rounded-lg font-bold transition ${
-              role === 'home'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-blue-900 hover:text-blue-300'
-            }`}
+            style={{
+              flex: 1, fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
+              padding: '8px 0', borderRadius: 8,
+              background: role === 'home' ? C.blueBright : C.blueSub,
+              border: `1px solid ${role === 'home' ? C.blueBright : C.borderFoc}`,
+              color: role === 'home' ? '#fff' : C.blueBright,
+              cursor: 'pointer', transition: 'all 140ms',
+            }}
           >
             HOME
           </button>
           <button
             onClick={e => { e.stopPropagation(); onSelect('away'); }}
-            className={`flex-1 text-xs py-1.5 rounded-lg font-bold transition ${
-              role === 'away'
-                ? 'bg-red-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-red-900 hover:text-red-300'
-            }`}
+            style={{
+              flex: 1, fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
+              padding: '8px 0', borderRadius: 8,
+              background: role === 'away' ? C.red : C.redSub,
+              border: `1px solid ${role === 'away' ? C.red : `${C.red}40`}`,
+              color: role === 'away' ? '#fff' : C.red,
+              cursor: 'pointer', transition: 'all 140ms',
+            }}
           >
             AWAY
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
-// ─── VS Matchup Panel ─────────────────────────────────────────────────────────
+// ─── VS Matchup Bar ───────────────────────────────────────────────────────────
 
-interface MatchupPanelProps {
+interface MatchupBarProps {
   homeTeam: HistoricalTeam | null;
   awayTeam: HistoricalTeam | null;
   onPlay: () => void;
 }
 
-function MatchupPanel({ homeTeam, awayTeam, onPlay }: MatchupPanelProps) {
+function MatchupBar({ homeTeam, awayTeam, onPlay }: MatchupBarProps) {
   if (!homeTeam && !awayTeam) return null;
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 40 }}
       animate={{ opacity: 1, y: 0 }}
-      className="sticky bottom-0 bg-gray-900/95 backdrop-blur-sm border-t border-gray-700 px-6 py-4"
+      style={{
+        position: 'sticky', bottom: 0, zIndex: 50,
+        background: `rgba(9,13,24,0.96)`, backdropFilter: 'blur(14px)',
+        borderTop: `1px solid ${C.border}`,
+        padding: '14px 24px',
+      }}
     >
-      <div className="max-w-4xl mx-auto flex items-center gap-4">
+      <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 16 }}>
         {/* Home */}
-        <div className="flex-1 text-center">
+        <div style={{ flex: 1, textAlign: 'center' }}>
           {homeTeam ? (
-            <div>
-              <div className="text-xs text-blue-400 uppercase tracking-widest mb-0.5">Home</div>
-              <div className="font-black text-white">{homeTeam.city} {homeTeam.name}</div>
-              <div className="text-xs text-gray-500">{homeTeam.era} · OFF {homeTeam.offenseRating} · DEF {homeTeam.defenseRating}</div>
-            </div>
+            <>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.16em', color: C.blueBright, marginBottom: 2 }}>HOME</div>
+              <div style={{ fontWeight: 800, color: C.txt }}>{homeTeam.city} {homeTeam.name}</div>
+              <div style={{ fontSize: 11, color: C.txtSub }}>{homeTeam.era} · OFF {homeTeam.offenseRating} · DEF {homeTeam.defenseRating}</div>
+            </>
           ) : (
-            <div className="text-gray-600 text-sm">Select home team</div>
+            <div style={{ color: C.txtMuted, fontSize: 13 }}>Select home team</div>
           )}
         </div>
 
         {/* VS */}
-        <div className="text-2xl font-black text-gray-600">VS</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: C.border, flexShrink: 0 }}>VS</div>
 
         {/* Away */}
-        <div className="flex-1 text-center">
+        <div style={{ flex: 1, textAlign: 'center' }}>
           {awayTeam ? (
-            <div>
-              <div className="text-xs text-red-400 uppercase tracking-widest mb-0.5">Away</div>
-              <div className="font-black text-white">{awayTeam.city} {awayTeam.name}</div>
-              <div className="text-xs text-gray-500">{awayTeam.era} · OFF {awayTeam.offenseRating} · DEF {awayTeam.defenseRating}</div>
-            </div>
+            <>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.16em', color: C.red, marginBottom: 2 }}>AWAY</div>
+              <div style={{ fontWeight: 800, color: C.txt }}>{awayTeam.city} {awayTeam.name}</div>
+              <div style={{ fontSize: 11, color: C.txtSub }}>{awayTeam.era} · OFF {awayTeam.offenseRating} · DEF {awayTeam.defenseRating}</div>
+            </>
           ) : (
-            <div className="text-gray-600 text-sm">Select away team</div>
+            <div style={{ color: C.txtMuted, fontSize: 13 }}>Select away team</div>
           )}
         </div>
 
-        {/* Play button */}
-        <motion.button
+        <button
           onClick={onPlay}
           disabled={!homeTeam || !awayTeam}
-          whileTap={{ scale: 0.97 }}
-          className={`px-6 py-3 rounded-xl font-black tracking-wider text-sm transition whitespace-nowrap ${
-            homeTeam && awayTeam
-              ? 'bg-green-600 hover:bg-green-500 text-white'
-              : 'bg-gray-800 text-gray-600 cursor-not-allowed'
-          }`}
+          style={{
+            padding: '12px 28px', borderRadius: 10, fontWeight: 800, fontSize: 14,
+            letterSpacing: '.06em', cursor: homeTeam && awayTeam ? 'pointer' : 'not-allowed',
+            background: homeTeam && awayTeam
+              ? `linear-gradient(135deg, ${C.green}, #00a844)`
+              : C.border,
+            color: homeTeam && awayTeam ? '#000' : C.txtMuted,
+            border: 'none', transition: 'opacity 160ms',
+            opacity: homeTeam && awayTeam ? 1 : 0.5,
+            flexShrink: 0,
+          }}
         >
-          PLAY THIS MATCHUP →
-        </motion.button>
+          PLAY MATCHUP →
+        </button>
       </div>
     </motion.div>
   );
@@ -425,7 +473,6 @@ export function HistoricalErasPage() {
 
   function handleSelect(teamId: string, role: 'home' | 'away') {
     if (role === 'home') {
-      // If this team was already away, clear away
       if (awayTeamId === teamId) setAwayTeamId(null);
       setHomeTeamId(teamId);
     } else {
@@ -445,159 +492,199 @@ export function HistoricalErasPage() {
     return null;
   }
 
+  const sortedForRankings = [...HISTORICAL_TEAMS].sort(
+    (a, b) => (b.offenseRating + b.defenseRating + b.speedRating) - (a.offenseRating + a.defenseRating + a.speedRating)
+  );
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white pb-28">
-      {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-800 px-6 py-6">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-4xl font-black tracking-widest mb-1">HISTORICAL ERAS</h1>
-          <p className="text-gray-400 text-sm">Step into football history. 12 legendary teams, all playable.</p>
+    <AppShell backTo="/game" title="Historical Eras" maxWidth={1200} noPad>
+      <div style={{ padding: '32px 24px 0' }}>
+        {/* Hero */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.2em', color: C.gold, marginBottom: 6 }}>
+            LEGENDS OF THE GAME
+          </div>
+          <h1 style={{ fontSize: 32, fontWeight: 900, color: C.txt, margin: 0, letterSpacing: '-.02em' }}>
+            Historical Eras
+          </h1>
+          <p style={{ color: C.txtSub, fontSize: 14, marginTop: 6 }}>
+            12 legendary teams. All playable. Step into football history.
+          </p>
         </div>
-      </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Instructions strip */}
-        <div className="flex items-center gap-3 mb-6 text-sm text-gray-500 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
-          <span className="text-blue-400 font-bold">1.</span> Select a <span className="text-blue-400 font-semibold">HOME</span> team
-          <span className="text-gray-700 mx-1">|</span>
-          <span className="text-red-400 font-bold">2.</span> Select an <span className="text-red-400 font-semibold">AWAY</span> team
-          <span className="text-gray-700 mx-1">|</span>
-          <span className="text-green-400 font-bold">3.</span> Click <span className="text-green-400 font-semibold">PLAY THIS MATCHUP</span>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: C.panel, border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: '10px 16px', marginBottom: 28, flexWrap: 'wrap',
+        }}>
+          <Badge color={C.blueBright}>1. Pick HOME</Badge>
+          <span style={{ color: C.txtMuted, fontSize: 12 }}>then</span>
+          <Badge color={C.red}>2. Pick AWAY</Badge>
+          <span style={{ color: C.txtMuted, fontSize: 12 }}>then</span>
+          <Badge color={C.green}>3. Play Matchup</Badge>
         </div>
 
-        {/* Team Cards Grid — 3 columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Team Cards Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: 16, marginBottom: 40,
+        }}>
           {HISTORICAL_TEAMS.map(team => (
-            <TeamCard
+            <div
               key={team.id}
-              team={team}
-              selected={homeTeamId === team.id || awayTeamId === team.id}
-              role={teamRole(team.id)}
-              onSelect={(role) => handleSelect(team.id, role)}
-            />
+              onClick={() => setDetailTeam(team)}
+            >
+              <TeamCard
+                team={team}
+                selected={homeTeamId === team.id || awayTeamId === team.id}
+                role={teamRole(team.id)}
+                onSelect={(role) => handleSelect(team.id, role)}
+              />
+            </div>
           ))}
         </div>
 
-        {/* Era comparison section */}
-        <div className="mt-10">
-          <h2 className="text-xs text-gray-500 uppercase tracking-widest mb-4">All-Time Rankings by Rating</h2>
-          <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-            <div className="grid grid-cols-5 text-xs text-gray-500 uppercase tracking-wider px-4 py-2 border-b border-gray-800">
+        {/* All-time rankings table */}
+        <div style={{ marginBottom: 40 }}>
+          <SectionHead sub="Sorted by combined ratings">All-Time Rankings</SectionHead>
+          <div style={{
+            background: C.surface, border: `1px solid ${C.border}`,
+            borderRadius: 14, overflow: 'hidden',
+          }}>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '40px 1fr 60px 60px 60px 70px',
+              gap: 8, padding: '10px 16px',
+              borderBottom: `1px solid ${C.border}`,
+              fontSize: 9, fontWeight: 800, letterSpacing: '.14em', color: C.txtMuted,
+            }}>
               <span>#</span>
-              <span>Team</span>
+              <span>TEAM</span>
               <span>OFF</span>
               <span>DEF</span>
               <span>SPD</span>
+              <span>TOTAL</span>
             </div>
-            {[...HISTORICAL_TEAMS]
-              .sort((a, b) => (b.offenseRating + b.defenseRating + b.speedRating) - (a.offenseRating + a.defenseRating + a.speedRating))
-              .map((team, i) => {
-                const isHome = homeTeamId === team.id;
-                const isAway = awayTeamId === team.id;
-                return (
-                  <div
-                    key={team.id}
-                    onClick={() => setDetailTeam(team)}
-                    className={`grid grid-cols-5 text-sm px-4 py-2 cursor-pointer transition-colors ${
-                      isHome ? 'bg-blue-950/40' : isAway ? 'bg-red-950/40' : i % 2 === 0 ? 'bg-gray-800/30 hover:bg-gray-800/60' : 'hover:bg-gray-800/40'
-                    }`}
-                  >
-                    <span className="text-gray-600 font-mono">{i + 1}</span>
-                    <span className="text-white font-bold">
-                      {isHome && <span className="text-blue-400 mr-1">H</span>}
-                      {isAway && <span className="text-red-400 mr-1">A</span>}
-                      {team.era} {team.city.split(' ').slice(1).join(' ')}
-                    </span>
-                    <span className={`font-bold ${team.offenseRating >= 95 ? 'text-yellow-400' : team.offenseRating >= 90 ? 'text-green-400' : 'text-white'}`}>
-                      {team.offenseRating}
-                    </span>
-                    <span className={`font-bold ${team.defenseRating >= 95 ? 'text-yellow-400' : team.defenseRating >= 90 ? 'text-green-400' : 'text-white'}`}>
-                      {team.defenseRating}
-                    </span>
-                    <span className={`font-bold ${team.speedRating >= 95 ? 'text-yellow-400' : team.speedRating >= 90 ? 'text-green-400' : 'text-white'}`}>
-                      {team.speedRating}
-                    </span>
-                  </div>
-                );
-              })}
+            {sortedForRankings.map((team, i) => {
+              const isHome = homeTeamId === team.id;
+              const isAway = awayTeamId === team.id;
+              const total = team.offenseRating + team.defenseRating + team.speedRating;
+              return (
+                <div
+                  key={team.id}
+                  onClick={() => setDetailTeam(team)}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '40px 1fr 60px 60px 60px 70px',
+                    gap: 8, padding: '10px 16px',
+                    borderBottom: `1px solid ${C.border}`,
+                    cursor: 'pointer',
+                    background: isHome ? `${C.blueBright}10` : isAway ? `${C.red}10` : i % 2 === 0 ? 'transparent' : `${C.border}20`,
+                    transition: 'background 140ms',
+                  }}
+                  onMouseEnter={e => { if (!isHome && !isAway) (e.currentTarget as HTMLDivElement).style.background = C.panel; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = isHome ? `${C.blueBright}10` : isAway ? `${C.red}10` : i % 2 === 0 ? 'transparent' : `${C.border}20`; }}
+                >
+                  <span style={{ color: C.txtMuted, fontWeight: 700, fontSize: 12 }}>{i + 1}</span>
+                  <span style={{ color: C.txt, fontWeight: 700, fontSize: 13 }}>
+                    {isHome && <span style={{ color: C.blueBright, marginRight: 6, fontSize: 10 }}>H</span>}
+                    {isAway && <span style={{ color: C.red, marginRight: 6, fontSize: 10 }}>A</span>}
+                    {team.era} {team.city.split(' ').slice(1).join(' ')}
+                  </span>
+                  <span style={{ color: ratingColor(team.offenseRating), fontWeight: 700, fontSize: 13 }}>{team.offenseRating}</span>
+                  <span style={{ color: ratingColor(team.defenseRating), fontWeight: 700, fontSize: 13 }}>{team.defenseRating}</span>
+                  <span style={{ color: ratingColor(team.speedRating), fontWeight: 700, fontSize: 13 }}>{team.speedRating}</span>
+                  <span style={{ color: total >= 270 ? C.gold : C.txt, fontWeight: 800, fontSize: 13 }}>{total}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
-
-        <button
-          onClick={() => navigate('/game')}
-          className="mt-6 text-xs text-gray-600 hover:text-gray-400 transition"
-        >
-          ← Back to Game Modes
-        </button>
       </div>
 
       {/* Detail Modal */}
       <AnimatePresence>
         {detailTeam && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            style={{
+              position: 'fixed', inset: 0, zIndex: 50,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+              padding: 24,
+            }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setDetailTeam(null)}
           >
             <motion.div
-              className="w-full max-w-md rounded-2xl bg-gray-900 border-2 overflow-hidden"
-              style={{ borderColor: hexToCss(detailTeam.primaryColor) }}
+              style={{
+                width: '100%', maxWidth: 480,
+                background: C.surface,
+                border: `2px solid ${hexToCss(detailTeam.primaryColor)}`,
+                borderRadius: 20, overflow: 'hidden',
+                boxShadow: `0 0 60px -10px ${hexToCss(detailTeam.primaryColor)}60`,
+              }}
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
               onClick={e => e.stopPropagation()}
             >
-              <div
-                className="h-2"
-                style={{ background: `linear-gradient(to right, ${hexToCss(detailTeam.primaryColor)}, ${hexToCss(detailTeam.secondaryColor)})` }}
-              />
-              <div className="p-6">
-                <div
-                  className="text-xs font-bold tracking-widest mb-1"
-                  style={{ color: hexToCss(detailTeam.secondaryColor) }}
-                >
+              <div style={{
+                height: 4,
+                background: `linear-gradient(90deg, ${hexToCss(detailTeam.primaryColor)}, ${hexToCss(detailTeam.secondaryColor)})`,
+              }} />
+              <div style={{ padding: 28 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.2em', color: hexToCss(detailTeam.secondaryColor), marginBottom: 4 }}>
                   {detailTeam.era} ERA
                 </div>
-                <h2 className="text-2xl font-black mb-1">{detailTeam.city} {detailTeam.name}</h2>
-                <p className="text-gray-400 text-sm mb-4">{detailTeam.keyPlayers}</p>
+                <h2 style={{ fontSize: 24, fontWeight: 900, color: C.txt, margin: '0 0 4px' }}>
+                  {detailTeam.city} {detailTeam.name}
+                </h2>
+                <p style={{ color: C.txtSub, fontSize: 13, margin: '0 0 20px' }}>{detailTeam.keyPlayers}</p>
 
-                <div className="mb-4">
-                  <RatingBar label="Offense" value={detailTeam.offenseRating} color="#3b82f6" />
-                  <RatingBar label="Defense" value={detailTeam.defenseRating} color="#ef4444" />
-                  <RatingBar label="Speed"   value={detailTeam.speedRating}   color="#22c55e" />
+                <div style={{ marginBottom: 20 }}>
+                  <RatingBar label="OFFENSE" value={detailTeam.offenseRating} color={C.blueBright} />
+                  <RatingBar label="DEFENSE" value={detailTeam.defenseRating} color={C.red} />
+                  <RatingBar label="SPEED"   value={detailTeam.speedRating}   color={C.green} />
                 </div>
 
-                <p className="text-gray-300 text-sm leading-relaxed mb-4">{detailTeam.historicalNote}</p>
+                <p style={{ color: C.txt, fontSize: 14, lineHeight: 1.65, marginBottom: 16 }}>{detailTeam.historicalNote}</p>
 
-                <div
-                  className="text-xs font-black tracking-wider px-3 py-2 rounded text-center mb-4"
-                  style={{
-                    background: `${hexToCss(detailTeam.secondaryColor)}22`,
-                    color: hexToCss(detailTeam.secondaryColor),
-                    border: `1px solid ${hexToCss(detailTeam.secondaryColor)}`,
-                  }}
-                >
-                  🏆 {detailTeam.badge}
+                <div style={{
+                  fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
+                  padding: '8px 14px', borderRadius: 8, textAlign: 'center',
+                  background: `${hexToCss(detailTeam.secondaryColor)}18`,
+                  color: hexToCss(detailTeam.secondaryColor),
+                  border: `1px solid ${hexToCss(detailTeam.secondaryColor)}50`,
+                  marginBottom: 20,
+                }}>
+                  {detailTeam.badge}
                 </div>
 
-                <div className="flex gap-2">
-                  <button
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Btn
+                    variant="secondary"
+                    accent={C.blueBright}
                     onClick={() => { handleSelect(detailTeam.id, 'home'); setDetailTeam(null); }}
-                    className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition"
+                    style={{ flex: 1 }}
                   >
                     Set as HOME
-                  </button>
-                  <button
+                  </Btn>
+                  <Btn
+                    variant="danger"
                     onClick={() => { handleSelect(detailTeam.id, 'away'); setDetailTeam(null); }}
-                    className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-bold transition"
+                    style={{ flex: 1 }}
                   >
                     Set as AWAY
-                  </button>
+                  </Btn>
                   <button
                     onClick={() => setDetailTeam(null)}
-                    className="py-2 px-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm transition"
+                    style={{
+                      padding: '12px 14px', borderRadius: 10,
+                      background: C.panel, border: `1px solid ${C.border}`,
+                      color: C.txtSub, cursor: 'pointer', fontSize: 14,
+                    }}
                   >
                     ✕
                   </button>
@@ -608,8 +695,8 @@ export function HistoricalErasPage() {
         )}
       </AnimatePresence>
 
-      {/* Sticky matchup panel */}
-      <MatchupPanel homeTeam={homeTeam} awayTeam={awayTeam} onPlay={handlePlay} />
-    </div>
+      {/* Sticky matchup bar */}
+      <MatchupBar homeTeam={homeTeam} awayTeam={awayTeam} onPlay={handlePlay} />
+    </AppShell>
   );
 }

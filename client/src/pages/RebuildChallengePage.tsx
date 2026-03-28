@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { AppShell, C, Badge, Btn, SectionHead, StatTile } from '../components/AppShell';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,9 +13,9 @@ interface RebuildChallenge {
   description: string;
   flavor: string;
   startRecord: string;
-  startCap: number; // millions
+  startCap: number;
   startPicks: number;
-  faInterestModifier: number; // -15 = hard to attract FA
+  faInterestModifier: number;
   modifier?: string;
 }
 
@@ -128,7 +129,6 @@ const YEAR_OBJECTIVES: YearObjective[] = [
 ];
 
 const DECISIONS_BY_ROUND: Decision[][] = [
-  // Round 1 options per year (cycling)
   [
     {
       prompt: 'Your franchise QB is in year 3 of his development. Do you:',
@@ -155,7 +155,6 @@ const DECISIONS_BY_ROUND: Decision[][] = [
       ],
     },
   ],
-  // Round 2 options per year
   [
     {
       prompt: 'You have $42M in cap space. What\'s the priority?',
@@ -182,7 +181,6 @@ const DECISIONS_BY_ROUND: Decision[][] = [
       ],
     },
   ],
-  // Round 3 options per year
   [
     {
       prompt: 'Your best player is demanding a trade. Do you:',
@@ -213,25 +211,24 @@ const DECISIONS_BY_ROUND: Decision[][] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function difficultyColor(d: string): string {
+function difficultyAccent(d: string): string {
   switch (d) {
-    case 'Medium':       return 'text-green-400 border-green-700 bg-green-950';
-    case 'Medium-Hard':  return 'text-yellow-400 border-yellow-700 bg-yellow-950';
-    case 'Hard':         return 'text-orange-400 border-orange-700 bg-orange-950';
-    case 'Extreme':      return 'text-red-400 border-red-700 bg-red-950';
-    case 'Nightmare':    return 'text-purple-400 border-purple-700 bg-purple-950';
-    default:             return 'text-gray-400 border-gray-700 bg-gray-950';
+    case 'Medium':      return C.green;
+    case 'Medium-Hard': return C.gold;
+    case 'Hard':        return C.amber;
+    case 'Extreme':     return C.red;
+    case 'Nightmare':   return C.purple;
+    default:            return C.txtSub;
   }
 }
 
 function objectiveStatus(obj: YearObjective, currentYear: number, results: YearResult[]): ObjectiveStatus {
   const completedYear = results.find(r => r.year === obj.year);
   if (completedYear) {
-    const passed = checkObjective(obj, completedYear);
-    return passed ? 'completed' : 'failed';
+    return checkObjective(obj, completedYear) ? 'completed' : 'failed';
   }
   if (obj.year === currentYear) return 'in_progress';
-  if (obj.year > currentYear)   return 'locked';
+  if (obj.year > currentYear)  return 'locked';
   return 'failed';
 }
 
@@ -251,11 +248,11 @@ function scoreRebuild(results: YearResult[]): { score: number; tier: string } {
   let score = 0;
   for (const r of results) {
     score += r.wins * 5;
-    if (r.playoffResult === 'WC')          score += 30;
-    if (r.playoffResult === 'DIV')         score += 50;
-    if (r.playoffResult === 'CONF')        score += 80;
-    if (r.playoffResult === 'SB_LOSS')     score += 100;
-    if (r.playoffResult === 'CHAMPION')    score += 200;
+    if (r.playoffResult === 'WC')       score += 30;
+    if (r.playoffResult === 'DIV')      score += 50;
+    if (r.playoffResult === 'CONF')     score += 80;
+    if (r.playoffResult === 'SB_LOSS')  score += 100;
+    if (r.playoffResult === 'CHAMPION') score += 200;
   }
   const tier = score >= 800 ? 'S' : score >= 600 ? 'A' : score >= 400 ? 'B' : score >= 200 ? 'C' : 'D';
   return { score, tier };
@@ -263,48 +260,32 @@ function scoreRebuild(results: YearResult[]): { score: number; tier: string } {
 
 function tierColor(tier: string): string {
   switch (tier) {
-    case 'S': return 'text-yellow-300';
-    case 'A': return 'text-green-400';
-    case 'B': return 'text-blue-400';
-    case 'C': return 'text-gray-300';
-    default:  return 'text-gray-500';
+    case 'S': return C.gold;
+    case 'A': return C.green;
+    case 'B': return C.blueBright;
+    case 'C': return C.txtSub;
+    default:  return C.txtMuted;
   }
 }
 
-function simYear(
-  year: number,
-  teamRating: number,
-  challenge: RebuildChallenge,
-  morale: number,
-): YearResult {
+function simYear(year: number, teamRating: number, challenge: RebuildChallenge, morale: number): YearResult {
   const effectiveRating = Math.max(30, Math.min(99, teamRating + morale * 0.3));
   const winChance = 0.20 + (effectiveRating / 99) * 0.60;
-
   let wins = 0;
-  for (let g = 0; g < 17; g++) {
-    if (Math.random() < winChance) wins++;
-  }
-
-  // Year 1 Browns QB injury modifier
-  if (challenge.id === 'browns' && year === 1) {
-    wins = Math.max(0, wins - 3);
-  }
-
+  for (let g = 0; g < 17; g++) if (Math.random() < winChance) wins++;
+  if (challenge.id === 'browns' && year === 1) wins = Math.max(0, wins - 3);
   const losses = 17 - wins;
-
-  // Playoff determination
   let playoffResult: string | null = null;
   const playoffChance = wins >= 11 ? 0.95 : wins >= 9 ? 0.70 : wins >= 7 ? 0.35 : 0.05;
   if (Math.random() < playoffChance) {
     const roll = Math.random();
-    if (roll < 0.35)       playoffResult = 'WC';
-    else if (roll < 0.60)  playoffResult = 'DIV';
-    else if (roll < 0.80)  playoffResult = 'CONF';
-    else if (roll < 0.92)  playoffResult = 'SB_LOSS';
-    else                   playoffResult = 'CHAMPION';
+    if (roll < 0.35)      playoffResult = 'WC';
+    else if (roll < 0.60) playoffResult = 'DIV';
+    else if (roll < 0.80) playoffResult = 'CONF';
+    else if (roll < 0.92) playoffResult = 'SB_LOSS';
+    else                  playoffResult = 'CHAMPION';
   }
-
-  const events: string[] = [
+  const events = [
     'Rookie WR emerged as a top-10 receiver.',
     'Offensive line ranked top-5 by season\'s end.',
     'Defense allowed fewest points in the conference.',
@@ -316,99 +297,17 @@ function simYear(
     'Draft pick bust; 1st round pick cut before midseason.',
     'Surprise veteran FA proved to be the missing piece.',
   ];
-  const keyEvent = events[Math.floor(Math.random() * events.length)];
-
-  return { year, wins, losses, playoffResult, keyEvent };
+  return { year, wins, losses, playoffResult, keyEvent: events[Math.floor(Math.random() * events.length)] };
 }
 
 // ─── Leaderboard (localStorage) ───────────────────────────────────────────────
 
 const LB_KEY = 'rebuild_leaderboard';
-
 function loadLeaderboard(): LeaderboardEntry[] {
-  try {
-    const raw = localStorage.getItem(LB_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(LB_KEY) ?? 'null') ?? []; } catch { return []; }
 }
-
 function saveLeaderboard(entries: LeaderboardEntry[]): void {
-  try {
-    localStorage.setItem(LB_KEY, JSON.stringify(entries));
-  } catch { /* ignore */ }
-}
-
-// ─── Components ───────────────────────────────────────────────────────────────
-
-interface ChallengeCardProps {
-  challenge: RebuildChallenge;
-  selected: boolean;
-  onSelect: () => void;
-}
-
-function ChallengeCard({ challenge, selected, onSelect }: ChallengeCardProps) {
-  return (
-    <motion.div
-      onClick={onSelect}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      className={`rounded-xl border-2 p-4 cursor-pointer transition-all ${
-        selected
-          ? 'border-blue-500 bg-blue-950/30'
-          : 'border-gray-700 bg-gray-900 hover:border-gray-600'
-      }`}
-    >
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <span className="text-2xl mr-2">{challenge.emoji}</span>
-          <span className="font-black text-sm tracking-wider">{challenge.name}</span>
-        </div>
-        <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${difficultyColor(challenge.difficulty)}`}>
-          {challenge.difficulty.toUpperCase()}
-        </span>
-      </div>
-      <p className="text-gray-300 text-xs mb-1">{challenge.description}</p>
-      <p className="text-gray-500 text-xs italic mb-3">"{challenge.flavor}"</p>
-      <div className="flex gap-3 text-xs text-gray-500">
-        <span>Start: {challenge.startRecord}</span>
-        <span>Cap: ${challenge.startCap}M</span>
-        <span>Picks: {challenge.startPicks}</span>
-      </div>
-      {challenge.modifier && (
-        <div className="mt-2 text-xs text-red-400 bg-red-950/30 rounded px-2 py-1">
-          ⚠ {challenge.modifier}
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-function ObjectivePill({ status, label, year }: { status: ObjectiveStatus; label: string; year: number }) {
-  const style = {
-    locked:      'bg-gray-800 border-gray-700 text-gray-600',
-    in_progress: 'bg-yellow-950 border-yellow-600 text-yellow-300 animate-pulse',
-    completed:   'bg-green-950 border-green-600 text-green-300',
-    failed:      'bg-red-950 border-red-700 text-red-400',
-  }[status];
-
-  const icon = {
-    locked:      '🔒',
-    in_progress: '⚡',
-    completed:   '✅',
-    failed:      '❌',
-  }[status];
-
-  return (
-    <div className={`rounded-lg border px-3 py-2 text-xs ${style}`}>
-      <div className="flex items-center gap-1.5">
-        <span>{icon}</span>
-        <span className="font-bold">Year {year}</span>
-      </div>
-      <div className="mt-0.5 text-xs opacity-80">{label}</div>
-    </div>
-  );
+  try { localStorage.setItem(LB_KEY, JSON.stringify(entries)); } catch { /* ignore */ }
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -418,34 +317,27 @@ type Phase = 'setup' | 'active' | 'deciding' | 'simming' | 'done';
 export function RebuildChallengePage() {
   const navigate = useNavigate();
 
-  // Setup state
   const [selectedChallenge, setSelectedChallenge] = useState<RebuildChallenge | null>(null);
-  const [phase, setPhase]     = useState<Phase>('setup');
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(loadLeaderboard);
-
-  // Active rebuild state
-  const [currentYear,   setCurrentYear]   = useState(1);
-  const [teamRating,    setTeamRating]     = useState(55);
-  const [capSpace,      setCapSpace]       = useState(0);
-  const [draftPicks,    setDraftPicks]     = useState(0);
-  const [morale,        setMorale]         = useState(0);
-  const [yearResults,   setYearResults]    = useState<YearResult[]>([]);
-
-  // Decision state
-  const [decisionRound,  setDecisionRound]  = useState(0);
-  const [activeDecision, setActiveDecision] = useState<Decision | null>(null);
-  const [decisionHistory, setDecisionHistory] = useState<string[]>([]);
-
-  // Sim state
-  const [simResult, setSimResult] = useState<YearResult | null>(null);
+  const [phase,             setPhase]             = useState<Phase>('setup');
+  const [leaderboard,       setLeaderboard]       = useState<LeaderboardEntry[]>(loadLeaderboard);
+  const [currentYear,       setCurrentYear]       = useState(1);
+  const [teamRating,        setTeamRating]        = useState(55);
+  const [capSpace,          setCapSpace]          = useState(0);
+  const [draftPicks,        setDraftPicks]        = useState(0);
+  const [morale,            setMorale]            = useState(0);
+  const [yearResults,       setYearResults]       = useState<YearResult[]>([]);
+  const [decisionRound,     setDecisionRound]     = useState(0);
+  const [activeDecision,    setActiveDecision]    = useState<Decision | null>(null);
+  const [decisionHistory,   setDecisionHistory]   = useState<string[]>([]);
+  const [simResult,         setSimResult]         = useState<YearResult | null>(null);
 
   function handleStartRebuild() {
     if (!selectedChallenge) return;
     setTeamRating(
-      selectedChallenge.id === 'window_now' ? 82
-        : selectedChallenge.id === 'underdog' ? 68
+      selectedChallenge.id === 'window_now'   ? 82
+        : selectedChallenge.id === 'underdog'     ? 68
         : selectedChallenge.id === 'small_market' ? 62
-        : selectedChallenge.id === 'teardown' ? 45
+        : selectedChallenge.id === 'teardown'     ? 45
         : 40,
     );
     setCapSpace(selectedChallenge.startCap);
@@ -468,25 +360,18 @@ export function RebuildChallengePage() {
   function handleDecisionChoice(idx: number) {
     if (!activeDecision || !selectedChallenge) return;
     const choice = activeDecision.choices[idx];
-
     const newCap    = Math.max(0, capSpace + choice.capDelta);
     const newPicks  = Math.max(0, draftPicks + choice.pickDelta);
     const newRating = Math.max(40, Math.min(99, teamRating + choice.ratingDelta));
     const newMorale = Math.max(-10, Math.min(10, morale + choice.moraleDelta));
-
-    setCapSpace(newCap);
-    setDraftPicks(newPicks);
-    setTeamRating(newRating);
-    setMorale(newMorale);
+    setCapSpace(newCap); setDraftPicks(newPicks); setTeamRating(newRating); setMorale(newMorale);
     setDecisionHistory(prev => [...prev, `Year ${currentYear} R${decisionRound}: ${choice.effect}`]);
-
     const nextRound = decisionRound + 1;
     if (nextRound <= 3) {
       const nextDecision = DECISIONS_BY_ROUND[nextRound - 1][(currentYear - 1) % DECISIONS_BY_ROUND[nextRound - 1].length];
       setActiveDecision(nextDecision);
       setDecisionRound(nextRound);
     } else {
-      // All 3 decisions made — simulate the year
       setPhase('simming');
       const result = simYear(currentYear, newRating, selectedChallenge, newMorale);
       setSimResult(result);
@@ -497,117 +382,146 @@ export function RebuildChallengePage() {
     if (!simResult || !selectedChallenge) return;
     const newResults = [...yearResults, simResult];
     setYearResults(newResults);
-    setSimResult(null);
-    setDecisionRound(0);
-    setActiveDecision(null);
-
+    setSimResult(null); setDecisionRound(0); setActiveDecision(null);
     const nextYear = currentYear + 1;
     if (nextYear > 10) {
-      // Rebuild complete
       const { score, tier } = scoreRebuild(newResults);
       const champYears = newResults.filter(r => r.playoffResult === 'CHAMPION');
-      const firstChamp = champYears.length > 0 ? champYears[0].year : null;
-
       const entry: LeaderboardEntry = {
         id: Date.now().toString(),
         challengeId: selectedChallenge.id,
         teamName: selectedChallenge.name,
         finalRecord: `${newResults[newResults.length - 1].wins}-${newResults[newResults.length - 1].losses}`,
-        yearsToFirstChampionship: firstChamp,
+        yearsToFirstChampionship: champYears.length > 0 ? champYears[0].year : null,
         totalChampionships: champYears.length,
-        score,
-        tier,
-        date: Date.now(),
+        score, tier, date: Date.now(),
       };
-
       const newBoard = [entry, ...leaderboard].sort((a, b) => b.score - a.score).slice(0, 20);
-      setLeaderboard(newBoard);
-      saveLeaderboard(newBoard);
-      setPhase('done');
+      setLeaderboard(newBoard); saveLeaderboard(newBoard); setPhase('done');
     } else {
       setCurrentYear(nextYear);
-      // Add draft picks at start of each year
       setDraftPicks(prev => prev + 7);
       setPhase('active');
     }
   }
 
+  const { score: currentScore, tier: currentTier } = scoreRebuild(yearResults);
+
   // ─── Setup Screen ─────────────────────────────────────────────────────────
 
   if (phase === 'setup') {
     return (
-      <div className="min-h-screen bg-gray-950 text-white">
-        {/* Header */}
-        <div className="bg-gray-900 border-b border-gray-800 px-6 py-6 text-center">
-          <h1 className="text-4xl font-black tracking-widest mb-1">REBUILD CHALLENGE</h1>
-          <p className="text-gray-400 text-sm">Start from the bottom. Build a dynasty.</p>
+      <AppShell backTo="/game" title="Rebuild Challenge" maxWidth={960}>
+        {/* Hero */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.2em', color: C.gold, marginBottom: 6 }}>
+            FRANCHISE MODE
+          </div>
+          <h1 style={{ fontSize: 32, fontWeight: 900, color: C.txt, margin: '0 0 8px', letterSpacing: '-.02em' }}>
+            Rebuild Challenge
+          </h1>
+          <p style={{ color: C.txtSub, fontSize: 14, margin: 0 }}>
+            Start from the bottom. Build a dynasty. 10 years, countless decisions.
+          </p>
         </div>
 
-        <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-          {/* Challenge selection */}
+        {/* Challenge grid */}
+        <SectionHead sub="Choose your starting scenario">Select Challenge</SectionHead>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14, marginBottom: 28 }}>
+          {CHALLENGES.map(c => {
+            const accent = difficultyAccent(c.difficulty);
+            const selected = selectedChallenge?.id === c.id;
+            return (
+              <div
+                key={c.id}
+                onClick={() => setSelectedChallenge(c)}
+                style={{
+                  position: 'relative', background: C.surface,
+                  border: `1px solid ${selected ? accent : C.border}`,
+                  borderRadius: 14, padding: '20px 20px 18px',
+                  cursor: 'pointer', overflow: 'hidden',
+                  transition: 'border-color 160ms, box-shadow 160ms, transform 160ms',
+                  transform: selected ? 'translateY(-2px)' : 'none',
+                  boxShadow: selected ? `0 0 24px -6px ${accent}50` : 'none',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = accent; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = selected ? accent : C.border; }}
+              >
+                <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${accent}0D 0%, transparent 50%)`, pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${accent}, transparent)` }} />
+
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 24 }}>{c.emoji}</span>
+                    <span style={{ fontWeight: 900, fontSize: 14, letterSpacing: '.04em', color: C.txt }}>{c.name}</span>
+                  </div>
+                  <Badge color={accent}>{c.difficulty}</Badge>
+                </div>
+
+                <p style={{ fontSize: 12, color: C.txt, margin: '0 0 4px', fontWeight: 500 }}>{c.description}</p>
+                <p style={{ fontSize: 11, color: C.txtSub, fontStyle: 'italic', margin: '0 0 12px' }}>"{c.flavor}"</p>
+
+                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: C.txtSub }}>
+                  <span>Start: <strong style={{ color: C.txt }}>{c.startRecord}</strong></span>
+                  <span>Cap: <strong style={{ color: C.green }}>${c.startCap}M</strong></span>
+                  <span>Picks: <strong style={{ color: C.blueBright }}>{c.startPicks}</strong></span>
+                </div>
+
+                {c.modifier && (
+                  <div style={{
+                    marginTop: 10, fontSize: 11, color: C.red,
+                    background: C.redSub, borderRadius: 6, padding: '5px 10px',
+                    border: `1px solid ${C.red}30`,
+                  }}>
+                    ⚠ {c.modifier}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <Btn
+          onClick={handleStartRebuild}
+          disabled={!selectedChallenge}
+          size="lg"
+          style={{ width: '100%', marginBottom: 36 }}
+        >
+          {selectedChallenge ? `BEGIN REBUILD: ${selectedChallenge.name} →` : 'SELECT A CHALLENGE'}
+        </Btn>
+
+        {/* Leaderboard */}
+        {leaderboard.length > 0 && (
           <div>
-            <h2 className="text-xs text-gray-500 uppercase tracking-widest mb-4">Select Your Challenge</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CHALLENGES.map(c => (
-                <ChallengeCard
-                  key={c.id}
-                  challenge={c}
-                  selected={selectedChallenge?.id === c.id}
-                  onSelect={() => setSelectedChallenge(c)}
-                />
+            <SectionHead sub="Your best rebuild runs">Past Attempts</SectionHead>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 100px 120px 110px 90px',
+                gap: 8, padding: '10px 16px',
+                borderBottom: `1px solid ${C.border}`,
+                fontSize: 9, fontWeight: 800, letterSpacing: '.14em', color: C.txtMuted,
+              }}>
+                <span>TEAM</span><span>RECORD</span><span>YRS TO TITLE</span><span>RINGS</span><span>SCORE</span>
+              </div>
+              {leaderboard.slice(0, 8).map((e, i) => (
+                <div key={e.id} style={{
+                  display: 'grid', gridTemplateColumns: '1fr 100px 120px 110px 90px',
+                  gap: 8, padding: '10px 16px',
+                  borderBottom: `1px solid ${C.border}`,
+                  background: i % 2 === 0 ? 'transparent' : `${C.border}20`,
+                  fontSize: 13,
+                }}>
+                  <span style={{ fontWeight: 700, color: C.txt }}>{e.teamName}</span>
+                  <span style={{ color: C.txtSub }}>{e.finalRecord}</span>
+                  <span style={{ color: C.txtSub }}>{e.yearsToFirstChampionship ?? '—'}</span>
+                  <span style={{ color: C.gold, fontWeight: 700 }}>{e.totalChampionships}x</span>
+                  <span style={{ fontWeight: 900, color: tierColor(e.tier) }}>{e.tier} — {e.score}</span>
+                </div>
               ))}
             </div>
           </div>
-
-          <motion.button
-            onClick={handleStartRebuild}
-            disabled={!selectedChallenge}
-            whileTap={{ scale: 0.97 }}
-            className={`w-full py-4 rounded-xl font-black tracking-widest text-lg transition ${
-              selectedChallenge
-                ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                : 'bg-gray-800 text-gray-600 cursor-not-allowed'
-            }`}
-          >
-            {selectedChallenge ? `BEGIN REBUILD: ${selectedChallenge.name}` : 'SELECT A CHALLENGE'}
-          </motion.button>
-
-          {/* Leaderboard */}
-          {leaderboard.length > 0 && (
-            <div>
-              <h2 className="text-xs text-gray-500 uppercase tracking-widest mb-3">Past Rebuild Attempts</h2>
-              <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-                <div className="grid grid-cols-5 text-xs text-gray-500 uppercase tracking-wider px-4 py-2 border-b border-gray-800">
-                  <span>Team</span>
-                  <span>Final Record</span>
-                  <span>Yrs to 1st Title</span>
-                  <span>Championships</span>
-                  <span>Score</span>
-                </div>
-                {leaderboard.slice(0, 8).map((e, i) => (
-                  <div
-                    key={e.id}
-                    className={`grid grid-cols-5 text-sm px-4 py-2 ${i % 2 === 0 ? 'bg-gray-850' : 'bg-gray-900'}`}
-                  >
-                    <span className="text-white font-bold truncate">{e.teamName}</span>
-                    <span className="text-gray-300">{e.finalRecord}</span>
-                    <span className="text-gray-300">{e.yearsToFirstChampionship ?? '—'}</span>
-                    <span className="text-yellow-400 font-bold">{e.totalChampionships}x 🏆</span>
-                    <span className={`font-black ${tierColor(e.tier)}`}>{e.tier} — {e.score}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={() => navigate('/game')}
-            className="text-xs text-gray-600 hover:text-gray-400 transition"
-          >
-            ← Back to Game Modes
-          </button>
-        </div>
-      </div>
+        )}
+      </AppShell>
     );
   }
 
@@ -615,292 +529,302 @@ export function RebuildChallengePage() {
 
   if (!selectedChallenge) return null;
 
-  const { score: currentScore, tier: currentTier } = scoreRebuild(yearResults);
-
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Status Bar */}
-      <div className="bg-gray-900 border-b border-gray-800 px-6 py-3">
-        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-4 justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">{selectedChallenge.emoji}</span>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-widest">{selectedChallenge.name}</div>
-              <div className="font-black text-sm">Year {currentYear} / 10</div>
-            </div>
+    <AppShell backTo="/game" title="Rebuild Challenge" maxWidth={960}>
+      {/* Status bar */}
+      <div style={{
+        background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
+        padding: '16px 20px', marginBottom: 20,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 26 }}>{selectedChallenge.emoji}</span>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.16em', color: C.txtMuted }}>{selectedChallenge.name}</div>
+            <div style={{ fontWeight: 900, fontSize: 18, color: C.txt }}>Year {currentYear} / 10</div>
           </div>
-          <div className="flex gap-6 text-xs">
-            <div>
-              <div className="text-gray-500 uppercase tracking-widest">Team Rating</div>
-              <div className="font-black text-white text-lg">{teamRating}</div>
-            </div>
-            <div>
-              <div className="text-gray-500 uppercase tracking-widest">Cap Space</div>
-              <div className="font-black text-green-400 text-lg">${capSpace}M</div>
-            </div>
-            <div>
-              <div className="text-gray-500 uppercase tracking-widest">Draft Picks</div>
-              <div className="font-black text-blue-400 text-lg">{draftPicks}</div>
-            </div>
-            <div>
-              <div className="text-gray-500 uppercase tracking-widest">Morale</div>
-              <div className={`font-black text-lg ${morale > 0 ? 'text-green-400' : morale < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                {morale > 0 ? '+' : ''}{morale}
-              </div>
+        </div>
+        <div style={{ display: 'flex', gap: 20 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.14em', color: C.txtMuted }}>RATING</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: teamRating >= 80 ? C.green : teamRating >= 65 ? C.gold : C.red }}>{teamRating}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.14em', color: C.txtMuted }}>CAP</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: C.green }}>${capSpace}M</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.14em', color: C.txtMuted }}>PICKS</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: C.blueBright }}>{draftPicks}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.14em', color: C.txtMuted }}>MORALE</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: morale > 0 ? C.green : morale < 0 ? C.red : C.txtSub }}>
+              {morale > 0 ? '+' : ''}{morale}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-
-        {/* Progress Tracker */}
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
-          <div className="text-xs text-gray-500 uppercase tracking-widest mb-4">Rebuild Progress</div>
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {Array.from({ length: 10 }, (_, i) => i + 1).map(yr => {
-              const result = yearResults.find(r => r.year === yr);
-              const isCurrent = yr === currentYear;
-              return (
-                <div
-                  key={yr}
-                  className={`flex-1 min-w-[64px] rounded-lg p-2 text-center text-xs border transition-all ${
-                    result
-                      ? result.playoffResult === 'CHAMPION'
-                        ? 'bg-yellow-950 border-yellow-500 text-yellow-300'
-                        : 'bg-green-950/40 border-green-800 text-green-300'
-                      : isCurrent
-                      ? 'bg-blue-950/40 border-blue-600 text-blue-300 ring-1 ring-blue-500'
-                      : 'bg-gray-800 border-gray-700 text-gray-600'
-                  }`}
-                >
-                  <div className="font-bold">Yr {yr}</div>
-                  {result ? (
-                    <>
-                      <div>{result.wins}-{result.losses}</div>
-                      <div className="text-xs opacity-70">{result.playoffResult ?? '—'}</div>
-                    </>
-                  ) : isCurrent ? (
-                    <div className="text-xs animate-pulse">IN PROGRESS</div>
-                  ) : (
-                    <div className="text-xs">🔒</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+      {/* Year progress track */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px', marginBottom: 20 }}>
+        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.16em', color: C.txtMuted, marginBottom: 14 }}>REBUILD TIMELINE</div>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+          {Array.from({ length: 10 }, (_, i) => i + 1).map(yr => {
+            const result = yearResults.find(r => r.year === yr);
+            const isCurrent = yr === currentYear;
+            const accent = result?.playoffResult === 'CHAMPION' ? C.gold
+              : result ? C.green
+              : isCurrent ? C.blueBright
+              : C.border;
+            return (
+              <div key={yr} style={{
+                flex: '1 0 60px', borderRadius: 10, padding: '8px 4px',
+                textAlign: 'center', fontSize: 10,
+                background: result?.playoffResult === 'CHAMPION' ? C.goldSub
+                  : result ? C.greenSub
+                  : isCurrent ? C.blueSub
+                  : 'transparent',
+                border: `1px solid ${accent}`,
+                fontWeight: 700, color: accent,
+              }}>
+                <div>Yr {yr}</div>
+                {result ? (
+                  <>
+                    <div style={{ fontSize: 11 }}>{result.wins}-{result.losses}</div>
+                    <div style={{ fontSize: 9, opacity: 0.8 }}>{result.playoffResult ?? '—'}</div>
+                  </>
+                ) : isCurrent ? (
+                  <div style={{ fontSize: 9, opacity: 0.7 }}>NOW</div>
+                ) : (
+                  <div style={{ fontSize: 11 }}>—</div>
+                )}
+              </div>
+            );
+          })}
         </div>
+      </div>
 
-        {/* Objectives */}
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">Objectives</div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            {YEAR_OBJECTIVES.map(obj => (
-              <ObjectivePill
-                key={obj.year}
-                status={objectiveStatus(obj, currentYear, yearResults)}
-                label={obj.label}
-                year={obj.year}
-              />
+      {/* Objectives */}
+      <div style={{ marginBottom: 20 }}>
+        <SectionHead>Objectives</SectionHead>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+          {YEAR_OBJECTIVES.map(obj => {
+            const st = objectiveStatus(obj, currentYear, yearResults);
+            const accent = st === 'completed' ? C.green : st === 'in_progress' ? C.gold : st === 'failed' ? C.red : C.border;
+            return (
+              <div key={obj.year} style={{
+                background: C.panel, border: `1px solid ${accent}`,
+                borderRadius: 10, padding: '10px 12px', fontSize: 11,
+                opacity: st === 'locked' ? 0.4 : 1,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <span>{st === 'completed' ? '✅' : st === 'in_progress' ? '⚡' : st === 'failed' ? '❌' : '🔒'}</span>
+                  <span style={{ fontWeight: 800, color: accent }}>Year {obj.year}</span>
+                </div>
+                <div style={{ color: C.txtSub, lineHeight: 1.4 }}>{obj.label}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Season history */}
+      {yearResults.length > 0 && (
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px', marginBottom: 20 }}>
+          <SectionHead>Season History</SectionHead>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {yearResults.map(r => (
+              <div key={r.year} style={{
+                display: 'flex', alignItems: 'center', gap: 14, padding: '8px 0',
+                borderBottom: `1px solid ${C.border}`, fontSize: 13,
+              }}>
+                <span style={{ color: C.txtMuted, minWidth: 60, fontWeight: 700 }}>Year {r.year}</span>
+                <span style={{ fontWeight: 900, color: C.txt, minWidth: 52 }}>{r.wins}-{r.losses}</span>
+                <div style={{
+                  fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
+                  background: r.playoffResult === 'CHAMPION' ? C.goldSub : r.playoffResult ? C.blueSub : 'transparent',
+                  color: r.playoffResult === 'CHAMPION' ? C.gold : r.playoffResult ? C.blueBright : C.txtMuted,
+                  border: `1px solid ${r.playoffResult === 'CHAMPION' ? `${C.gold}40` : r.playoffResult ? `${C.blueBright}30` : C.border}`,
+                }}>
+                  {r.playoffResult ?? 'MISSED PLAYOFFS'}
+                </div>
+                <span style={{ fontSize: 11, color: C.txtSub, display: 'none', flex: 1 }} className="sm-show">{r.keyEvent}</span>
+              </div>
             ))}
           </div>
         </div>
+      )}
 
-        {/* Past results summary */}
-        {yearResults.length > 0 && (
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">Season History</div>
-            <div className="space-y-2">
-              {yearResults.map(r => (
-                <div key={r.year} className="flex items-center gap-3 text-sm">
-                  <span className="text-gray-500 min-w-[50px]">Year {r.year}</span>
-                  <span className="font-bold text-white min-w-[48px]">{r.wins}-{r.losses}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded ${
-                    r.playoffResult === 'CHAMPION' ? 'bg-yellow-600 text-white'
-                    : r.playoffResult ? 'bg-blue-800 text-blue-200'
-                    : 'bg-gray-800 text-gray-500'
-                  }`}>
-                    {r.playoffResult ?? 'Missed Playoffs'}
-                  </span>
-                  <span className="text-xs text-gray-500 hidden sm:block">{r.keyEvent}</span>
-                </div>
-              ))}
+      {/* Decision / Sim panels */}
+      <AnimatePresence mode="wait">
+        {phase === 'deciding' && activeDecision && (
+          <motion.div
+            key={`decision-${decisionRound}`}
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            style={{
+              background: C.surface, border: `1px solid ${C.amber}`,
+              borderRadius: 14, padding: '20px 20px', marginBottom: 20,
+              position: 'relative', overflow: 'hidden',
+            }}
+          >
+            <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${C.amber}08 0%, transparent 50%)`, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${C.amber}, transparent)` }} />
+            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.18em', color: C.amber, marginBottom: 12 }}>
+              DECISION {decisionRound} / 3 — YEAR {currentYear}
             </div>
-          </div>
-        )}
-
-        {/* Decision Panel */}
-        <AnimatePresence mode="wait">
-          {phase === 'deciding' && activeDecision && (
-            <motion.div
-              key={`decision-${decisionRound}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-gray-900 rounded-xl border border-yellow-700 p-5"
-            >
-              <div className="text-xs text-yellow-500 uppercase tracking-widest mb-3">
-                Decision Round {decisionRound} / 3
-              </div>
-              <p className="font-bold text-white mb-4">{activeDecision.prompt}</p>
-              <div className="space-y-2">
-                {activeDecision.choices.map((choice, idx) => (
-                  <motion.button
-                    key={idx}
-                    onClick={() => handleDecisionChoice(idx)}
-                    whileHover={{ x: 4 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="w-full text-left p-3 rounded-lg bg-gray-800 border border-gray-700 hover:border-blue-600 hover:bg-gray-750 transition"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="text-blue-400 font-black min-w-[18px]">{String.fromCharCode(65 + idx)})</span>
-                      <div>
-                        <div className="text-sm text-white font-semibold">{choice.label}</div>
-                        <div className="flex gap-3 mt-1 text-xs text-gray-500">
-                          {choice.capDelta !== 0 && (
-                            <span className={choice.capDelta > 0 ? 'text-green-400' : 'text-red-400'}>
-                              Cap: {choice.capDelta > 0 ? '+' : ''}{choice.capDelta}M
-                            </span>
-                          )}
-                          {choice.pickDelta !== 0 && (
-                            <span className={choice.pickDelta > 0 ? 'text-blue-400' : 'text-orange-400'}>
-                              Picks: {choice.pickDelta > 0 ? '+' : ''}{choice.pickDelta}
-                            </span>
-                          )}
-                          {choice.ratingDelta !== 0 && (
-                            <span className={choice.ratingDelta > 0 ? 'text-green-400' : 'text-red-400'}>
-                              Rating: {choice.ratingDelta > 0 ? '+' : ''}{choice.ratingDelta}
-                            </span>
-                          )}
-                        </div>
+            <p style={{ fontWeight: 700, fontSize: 16, color: C.txt, margin: '0 0 16px', lineHeight: 1.45 }}>{activeDecision.prompt}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {activeDecision.choices.map((choice, idx) => (
+                <motion.button
+                  key={idx}
+                  onClick={() => handleDecisionChoice(idx)}
+                  whileHover={{ x: 4 }}
+                  whileTap={{ scale: 0.98 }}
+                  style={{
+                    background: C.panel, border: `1px solid ${C.border}`,
+                    borderRadius: 10, padding: '14px 16px', cursor: 'pointer',
+                    textAlign: 'left', color: C.txt, transition: 'border-color 140ms',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.blueBright; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
+                >
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <span style={{ color: C.blueBright, fontWeight: 900, fontSize: 13, minWidth: 20 }}>
+                      {String.fromCharCode(65 + idx)})
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.txt, marginBottom: 6 }}>{choice.label}</div>
+                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                        {choice.capDelta !== 0 && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: choice.capDelta > 0 ? C.green : C.red }}>
+                            Cap: {choice.capDelta > 0 ? '+' : ''}{choice.capDelta}M
+                          </span>
+                        )}
+                        {choice.pickDelta !== 0 && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: choice.pickDelta > 0 ? C.blueBright : C.amber }}>
+                            Picks: {choice.pickDelta > 0 ? '+' : ''}{choice.pickDelta}
+                          </span>
+                        )}
+                        {choice.ratingDelta !== 0 && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: choice.ratingDelta > 0 ? C.green : C.red }}>
+                            Rating: {choice.ratingDelta > 0 ? '+' : ''}{choice.ratingDelta}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </motion.button>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {phase === 'simming' && simResult && (
-            <motion.div
-              key="simming"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className="bg-gray-900 rounded-xl border border-blue-700 p-6 text-center"
-            >
-              <div className="text-xs text-blue-400 uppercase tracking-widest mb-2">Year {currentYear} Results</div>
-              <div className="text-5xl font-black mb-1">
-                {simResult.wins} — {simResult.losses}
-              </div>
-              {simResult.playoffResult && (
-                <div className={`inline-block px-3 py-1 rounded-full text-sm font-bold mb-3 ${
-                  simResult.playoffResult === 'CHAMPION'
-                    ? 'bg-yellow-500 text-black'
-                    : 'bg-blue-700 text-white'
-                }`}>
-                  {simResult.playoffResult === 'CHAMPION' ? '🏆 SUPER BOWL CHAMPIONS' : `Playoffs: ${simResult.playoffResult}`}
-                </div>
-              )}
-              {!simResult.playoffResult && (
-                <div className="text-gray-500 text-sm mb-3">Missed the playoffs</div>
-              )}
-              <p className="text-gray-400 text-sm italic mb-4">"{simResult.keyEvent}"</p>
-              <motion.button
-                onClick={handleAdvanceYear}
-                whileTap={{ scale: 0.97 }}
-                className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black tracking-wider text-sm transition"
-              >
-                {currentYear < 10 ? `ADVANCE TO YEAR ${currentYear + 1} →` : 'COMPLETE REBUILD →'}
-              </motion.button>
-            </motion.div>
-          )}
-
-          {phase === 'active' && (
-            <motion.div
-              key="active"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center"
-            >
-              <motion.button
-                onClick={handleBeginDecisions}
-                whileTap={{ scale: 0.97 }}
-                className="w-full max-w-sm mx-auto block py-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black tracking-widest text-lg transition"
-              >
-                SIMULATE YEAR {currentYear} →
-              </motion.button>
-              <p className="text-xs text-gray-600 mt-2">Make 3 key decisions before the season simulates</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Decision history */}
-        {decisionHistory.length > 0 && (
-          <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-600 uppercase tracking-widest mb-2">Decision Log</div>
-            <div className="space-y-1">
-              {decisionHistory.map((d, i) => (
-                <div key={i} className="text-xs text-gray-500">› {d}</div>
+                  </div>
+                </motion.button>
               ))}
-            </div>
-          </div>
-        )}
-
-        {/* Done screen */}
-        {phase === 'done' && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-gray-900 rounded-2xl border border-yellow-600 p-8 text-center"
-          >
-            <h2 className="text-3xl font-black mb-2">REBUILD COMPLETE</h2>
-            <div className={`text-6xl font-black mb-1 ${tierColor(currentTier)}`}>{currentTier}-TIER</div>
-            <div className="text-2xl text-gray-300 mb-4">{currentScore} pts</div>
-            <div className="flex gap-6 justify-center mb-6">
-              <div>
-                <div className="text-xs text-gray-500 uppercase">Championships</div>
-                <div className="text-2xl font-black text-yellow-400">
-                  {yearResults.filter(r => r.playoffResult === 'CHAMPION').length}x 🏆
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 uppercase">Playoff Wins</div>
-                <div className="text-2xl font-black text-blue-400">
-                  {yearResults.filter(r => r.playoffResult && r.playoffResult !== 'WC').length}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 uppercase">Total Wins</div>
-                <div className="text-2xl font-black text-green-400">
-                  {yearResults.reduce((s, r) => s + r.wins, 0)}
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => { setPhase('setup'); setYearResults([]); setSelectedChallenge(null); }}
-                className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition"
-              >
-                New Rebuild
-              </button>
-              <button
-                onClick={() => navigate('/game')}
-                className="px-6 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-bold transition"
-              >
-                Game Modes
-              </button>
             </div>
           </motion.div>
         )}
 
-        <button
-          onClick={() => navigate('/game')}
-          className="text-xs text-gray-600 hover:text-gray-400 transition"
+        {phase === 'simming' && simResult && (
+          <motion.div
+            key="simming"
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+            style={{
+              background: C.surface, border: `1px solid ${C.blueBright}`,
+              borderRadius: 14, padding: '28px 24px', textAlign: 'center', marginBottom: 20,
+              position: 'relative', overflow: 'hidden',
+            }}
+          >
+            <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${C.blueSub} 0%, transparent 60%)`, pointerEvents: 'none' }} />
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.18em', color: C.blueBright, marginBottom: 10 }}>
+              YEAR {currentYear} RESULTS
+            </div>
+            <div style={{ fontSize: 52, fontWeight: 900, color: C.txt, letterSpacing: '-.02em', marginBottom: 8 }}>
+              {simResult.wins} — {simResult.losses}
+            </div>
+            {simResult.playoffResult ? (
+              <div style={{
+                display: 'inline-block', marginBottom: 14, padding: '6px 18px', borderRadius: 20,
+                background: simResult.playoffResult === 'CHAMPION' ? C.goldSub : C.blueSub,
+                border: `1px solid ${simResult.playoffResult === 'CHAMPION' ? `${C.gold}50` : `${C.blueBright}40`}`,
+                color: simResult.playoffResult === 'CHAMPION' ? C.gold : C.blueBright,
+                fontWeight: 800, fontSize: 13, letterSpacing: '.06em',
+              }}>
+                {simResult.playoffResult === 'CHAMPION' ? 'SUPER BOWL CHAMPIONS' : `PLAYOFFS: ${simResult.playoffResult}`}
+              </div>
+            ) : (
+              <div style={{ color: C.txtSub, marginBottom: 14, fontSize: 13 }}>Missed the playoffs</div>
+            )}
+            <p style={{ color: C.txtSub, fontSize: 13, fontStyle: 'italic', marginBottom: 20 }}>"{simResult.keyEvent}"</p>
+            <Btn onClick={handleAdvanceYear} size="lg">
+              {currentYear < 10 ? `ADVANCE TO YEAR ${currentYear + 1} →` : 'COMPLETE REBUILD →'}
+            </Btn>
+          </motion.div>
+        )}
+
+        {phase === 'active' && (
+          <motion.div
+            key="active"
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            style={{ textAlign: 'center', marginBottom: 20 }}
+          >
+            <Btn onClick={handleBeginDecisions} size="lg" style={{ minWidth: 320 }}>
+              SIMULATE YEAR {currentYear} →
+            </Btn>
+            <p style={{ fontSize: 11, color: C.txtMuted, marginTop: 8 }}>Make 3 key decisions before the season simulates</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Decision history log */}
+      {decisionHistory.length > 0 && (
+        <div style={{
+          background: C.panel, border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: '14px 16px', marginBottom: 20,
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.16em', color: C.txtMuted, marginBottom: 8 }}>DECISION LOG</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {decisionHistory.map((d, i) => (
+              <div key={i} style={{ fontSize: 12, color: C.txtSub }}>› {d}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Done screen */}
+      {phase === 'done' && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+          style={{
+            background: C.surface, border: `2px solid ${C.gold}`,
+            borderRadius: 20, padding: '40px 28px', textAlign: 'center',
+            position: 'relative', overflow: 'hidden',
+          }}
         >
-          ← Back to Game Modes
-        </button>
-      </div>
-    </div>
+          <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse at 50% 0%, ${C.goldSub} 0%, transparent 60%)`, pointerEvents: 'none' }} />
+          <h2 style={{ fontSize: 28, fontWeight: 900, color: C.txt, margin: '0 0 8px' }}>REBUILD COMPLETE</h2>
+          <div style={{ fontSize: 64, fontWeight: 900, color: tierColor(currentTier), letterSpacing: '-.02em', lineHeight: 1 }}>{currentTier}</div>
+          <div style={{ fontSize: 20, color: C.txtSub, marginBottom: 24 }}>{currentScore} pts</div>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 28 }}>
+            <StatTile
+              n={`${yearResults.filter(r => r.playoffResult === 'CHAMPION').length}x`}
+              label="Championships"
+              accent={C.gold}
+            />
+            <StatTile
+              n={yearResults.filter(r => r.playoffResult && r.playoffResult !== 'WC').length}
+              label="Playoff Wins"
+              accent={C.blueBright}
+            />
+            <StatTile
+              n={yearResults.reduce((s, r) => s + r.wins, 0)}
+              label="Total Wins"
+              accent={C.green}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <Btn onClick={() => { setPhase('setup'); setYearResults([]); setSelectedChallenge(null); }}>
+              New Rebuild
+            </Btn>
+            <Btn variant="ghost" onClick={() => navigate('/game')}>Game Modes</Btn>
+          </div>
+        </motion.div>
+      )}
+    </AppShell>
   );
 }

@@ -1,15 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const BG = '#070709';
-const SURFACE = '#0d0d18';
-const BORDER = 'rgba(255,255,255,0.06)';
-const GREEN = '#00ff87';
-const RED = '#ff4757';
-const GOLD = '#ffd700';
-const BLUE = '#4fc3f7';
+import { AppShell, C, Badge } from '../components/AppShell';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AnswerTone = 'fired' | 'measured' | 'funny';
@@ -285,11 +277,10 @@ function getPresserStyle(tones: AnswerTone[]): string {
   return 'WELL-ROUNDED';
 }
 
-// ─── Consequence icons ─────────────────────────────────────────────────────────
 const TONE_CONFIG = {
-  fired: { color: RED, label: 'FIRED UP', emoji: '⚡' },
-  measured: { color: BLUE, label: 'MEASURED', emoji: '📊' },
-  funny: { color: GOLD, label: 'FUNNY', emoji: '😄' },
+  fired:   { color: C.red,       label: 'FIRED UP', emoji: '⚡' },
+  measured:{ color: C.blueBright,label: 'MEASURED',  emoji: '📊' },
+  funny:   { color: C.gold,      label: 'FUNNY',    emoji: '😄' },
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -297,26 +288,25 @@ export default function PresserPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const teamId = searchParams.get('teamId') ?? 'kc';
-  const opponent = searchParams.get('opponent') ?? 'Ravens';
+  const teamId    = searchParams.get('teamId') ?? 'kc';
+  const opponent  = searchParams.get('opponent') ?? 'Ravens';
   const playerWon = searchParams.get('playerWon') !== 'false';
-  const score = searchParams.get('score') ?? '31-24';
-  const week = searchParams.get('week') ?? '12';
+  const score     = searchParams.get('score') ?? '31-24';
+  const week      = searchParams.get('week') ?? '12';
 
   const questionPool = playerWon ? WIN_QUESTIONS : LOSS_QUESTIONS;
-  // Shuffle and pick 3
   const [questions] = useState<QuestionSet[]>(() => {
     const shuffled = [...questionPool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, 3);
   });
 
-  const [currentQ, setCurrentQ] = useState(0);
+  const [currentQ,      setCurrentQ]      = useState(0);
   const [selectedTones, setSelectedTones] = useState<AnswerTone[]>([]);
-  const [showAnswer, setShowAnswer] = useState(false);
+  const [showAnswer,    setShowAnswer]    = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<(typeof questions[0]['answers'][0]) | null>(null);
-  const [done, setDone] = useState(false);
-  const [totalBonuses, setTotalBonuses] = useState<{ label: string; value: number }[]>([]);
-  const [headline, setHeadline] = useState('');
+  const [done,          setDone]          = useState(false);
+  const [totalBonuses,  setTotalBonuses]  = useState<{ label: string; value: number }[]>([]);
+  const [headline,      setHeadline]      = useState('');
 
   const handleAnswer = (ans: typeof questions[0]['answers'][0]) => {
     setSelectedAnswer(ans);
@@ -325,13 +315,12 @@ export default function PresserPage() {
 
   const advance = () => {
     if (!selectedAnswer) return;
-    const newTones = [...selectedTones, selectedAnswer.tone];
+    const newTones   = [...selectedTones, selectedAnswer.tone];
     setSelectedTones(newTones);
     const newBonuses = [...totalBonuses, selectedAnswer.bonus];
     setTotalBonuses(newBonuses);
 
     if (currentQ + 1 >= questions.length) {
-      // Generate headline from most fired-up or funniest answer
       const headlineBase = selectedAnswer.text.split('.')[0];
       setHeadline(headlineBase.slice(0, 80) + (headlineBase.length > 80 ? '...' : ''));
       setDone(true);
@@ -342,370 +331,346 @@ export default function PresserPage() {
     }
   };
 
-  const q = questions[currentQ];
-  const homeScore = score.split('-')[0];
-  const awayScore = score.split('-')[1];
-
+  const q            = questions[currentQ];
+  const homeScore    = score.split('-')[0];
+  const awayScore    = score.split('-')[1];
   const presserStyle = getPresserStyle(selectedTones);
-  const teamAbbr = teamId.toUpperCase();
+  const teamAbbr     = teamId.toUpperCase();
+
+  const styleColor = presserStyle === 'FIRED UP COACH' ? C.red
+    : presserStyle === 'FAN FAVORITE' ? C.gold
+    : presserStyle === 'CALCULATED'   ? C.blueBright : C.green;
 
   return (
-    <div style={{
-      background: BG,
-      minHeight: '100vh',
-      color: 'white',
-      fontFamily: 'system-ui, sans-serif',
-      // Spotlight effect
-      backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.04) 0%, transparent 70%)',
-    }}>
+    <AppShell backTo="/" title="Press Conference" maxWidth={760}>
       {/* Podium header */}
       <div style={{
-        background: 'linear-gradient(180deg, #0f0f1a 0%, #070709 100%)',
-        borderBottom: `1px solid ${BORDER}`,
-        padding: '32px 24px 24px',
+        background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
+        border: `1px solid ${C.border}`,
+        borderRadius: 16, marginBottom: 28,
+        padding: '28px 28px 24px',
         textAlign: 'center',
         position: 'relative',
+        overflow: 'hidden',
       }}>
-        <button onClick={() => navigate(-1)} style={{
-          position: 'absolute', left: 24, top: 24,
-          background: 'none', border: `1px solid ${BORDER}`,
-          color: 'rgba(255,255,255,0.5)', borderRadius: 8,
-          padding: '6px 14px', cursor: 'pointer', fontSize: 14,
-        }}>
-          ← Exit
-        </button>
+        {/* Spotlight effect */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.04) 0%, transparent 65%)',
+          pointerEvents: 'none',
+        }} />
 
         {/* Team badge */}
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 12,
-          marginBottom: 16,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 52, height: 52, borderRadius: 12,
+          background: C.elevated, border: `2px solid ${C.borderHi}`,
+          fontWeight: 900, fontSize: 16, color: C.txt, marginBottom: 14,
         }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: 10,
-            background: 'rgba(255,255,255,0.08)',
-            border: `2px solid rgba(255,255,255,0.15)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 900, fontSize: 16,
-          }}>
-            {teamAbbr}
-          </div>
+          {teamAbbr}
         </div>
 
-        <div style={{
-          fontSize: 13, letterSpacing: 4, color: 'rgba(255,255,255,0.4)',
-          marginBottom: 8, fontWeight: 600,
-        }}>
+        <div style={{ fontSize: 10, letterSpacing: '.22em', color: C.txtMuted, marginBottom: 10, fontWeight: 700 }}>
           POST-GAME PRESS CONFERENCE
         </div>
 
         {/* Score */}
-        <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 4 }}>
-          {teamAbbr} {homeScore}
-          <span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 12px', fontSize: 20 }}>vs</span>
+        <div style={{ fontSize: 26, fontWeight: 900, color: C.txt, marginBottom: 6 }}>
+          {teamAbbr} <span style={{ color: playerWon ? C.green : C.txt }}>{homeScore}</span>
+          <span style={{ color: C.txtMuted, margin: '0 12px', fontSize: 18 }}>vs</span>
           {opponent} {awayScore}
           <span style={{
-            fontSize: 13, letterSpacing: 2, color: GOLD,
-            background: 'rgba(255,215,0,0.1)',
-            border: `1px solid rgba(255,215,0,0.2)`,
-            padding: '3px 10px', borderRadius: 6, marginLeft: 12,
-            verticalAlign: 'middle',
+            fontSize: 11, letterSpacing: '.1em', color: C.gold,
+            background: C.goldSub, border: `1px solid ${C.gold}40`,
+            padding: '3px 10px', borderRadius: 6, marginLeft: 14,
+            verticalAlign: 'middle', fontWeight: 700,
           }}>FINAL</span>
         </div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>
-          Week {week} • 2026 NFL Season
+
+        <div style={{ fontSize: 12, color: C.txtSub, marginBottom: 14 }}>
+          Week {week} · 2026 NFL Season
         </div>
 
-        {/* Win/Loss banner */}
-        <div style={{
-          display: 'inline-block', marginTop: 16,
-          padding: '6px 20px', borderRadius: 20,
-          background: playerWon ? 'rgba(0,255,135,0.1)' : 'rgba(255,71,87,0.1)',
-          border: `1px solid ${playerWon ? GREEN + '40' : RED + '40'}`,
-          color: playerWon ? GREEN : RED,
-          fontWeight: 700, fontSize: 14, letterSpacing: 2,
-        }}>
-          {playerWon ? '🏆 W' : '💔 L'}
+        <div style={{ display: 'inline-block' }}>
+          <Badge
+            color={playerWon ? C.green : C.red}
+            dot
+          >
+            {playerWon ? 'WIN' : 'LOSS'}
+          </Badge>
         </div>
       </div>
 
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 24px' }}>
-        <AnimatePresence mode="wait">
-          {!done ? (
-            <motion.div
-              key={`q-${currentQ}`}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
-            >
-              {/* Progress */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {questions.map((_, i) => (
-                  <div key={i} style={{
-                    flex: 1, height: 3, borderRadius: 2,
-                    background: i < currentQ ? GREEN : i === currentQ ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)',
-                    transition: 'all 0.3s',
-                  }} />
-                ))}
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginLeft: 8 }}>
-                  {currentQ + 1}/{questions.length}
-                </span>
-              </div>
+      <AnimatePresence mode="wait">
+        {!done ? (
+          <motion.div
+            key={`q-${currentQ}`}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -30 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
+          >
+            {/* Progress */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {questions.map((_, i) => (
+                <div key={i} style={{
+                  flex: 1, height: 3, borderRadius: 2,
+                  background: i < currentQ ? C.green : i === currentQ ? C.borderHi : C.border,
+                  transition: 'all 0.3s',
+                }} />
+              ))}
+              <span style={{ fontSize: 11, color: C.txtSub, marginLeft: 8, fontWeight: 700, flexShrink: 0 }}>
+                {currentQ + 1}/{questions.length}
+              </span>
+            </div>
 
-              {/* Reporter info */}
+            {/* Reporter info */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                marginBottom: 4,
+                width: 40, height: 40, borderRadius: '50%',
+                background: C.panel, border: `1px solid ${C.border}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
               }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.08)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16,
-                }}>
-                  🎤
-                </div>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{q.reporter}</div>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Press Row</div>
-                </div>
+                🎤
               </div>
-
-              {/* Question */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                style={{
-                  fontSize: 20, fontWeight: 600, lineHeight: 1.5,
-                  color: 'rgba(255,255,255,0.9)',
-                  padding: '20px 24px',
-                  background: SURFACE,
-                  borderRadius: 14,
-                  border: `1px solid ${BORDER}`,
-                  borderLeft: `4px solid rgba(255,255,255,0.3)`,
-                }}
-              >
-                "{q.question}"
-              </motion.div>
-
-              {/* Answer buttons (before selection) */}
-              {!showAnswer && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginBottom: 4 }}>
-                    CHOOSE YOUR RESPONSE
-                  </div>
-                  {q.answers.map((ans) => {
-                    const cfg = TONE_CONFIG[ans.tone];
-                    return (
-                      <motion.button
-                        key={ans.tone}
-                        whileHover={{ scale: 1.01, x: 4 }}
-                        whileTap={{ scale: 0.99 }}
-                        onClick={() => handleAnswer(ans)}
-                        style={{
-                          padding: '16px 20px',
-                          background: `${cfg.color}10`,
-                          border: `1px solid ${cfg.color}40`,
-                          borderRadius: 12,
-                          color: 'white',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          display: 'flex', gap: 16, alignItems: 'flex-start',
-                        }}
-                      >
-                        <span style={{ fontSize: 22, flexShrink: 0 }}>{cfg.emoji}</span>
-                        <div>
-                          <div style={{ fontWeight: 800, color: cfg.color, fontSize: 13, letterSpacing: 1, marginBottom: 6 }}>
-                            {cfg.label}
-                          </div>
-                          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
-                            {ans.label}
-                          </div>
-                        </div>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Answer reveal */}
-              {showAnswer && selectedAnswer && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-                >
-                  {/* Response quote */}
-                  <div style={{
-                    padding: '20px 24px',
-                    background: SURFACE,
-                    borderRadius: 14,
-                    border: `1px solid ${TONE_CONFIG[selectedAnswer.tone].color}30`,
-                    borderLeft: `4px solid ${TONE_CONFIG[selectedAnswer.tone].color}`,
-                    position: 'relative',
-                  }}>
-                    <div style={{
-                      fontSize: 11, color: TONE_CONFIG[selectedAnswer.tone].color,
-                      letterSpacing: 2, fontWeight: 700, marginBottom: 12,
-                    }}>
-                      YOUR RESPONSE {TONE_CONFIG[selectedAnswer.tone].emoji}
-                    </div>
-                    <div style={{ fontSize: 16, lineHeight: 1.7, color: 'rgba(255,255,255,0.85)' }}>
-                      "{selectedAnswer.text}"
-                    </div>
-                  </div>
-
-                  {/* Consequence */}
-                  <motion.div
-                    initial={{ scale: 0.95, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                    style={{
-                      padding: '14px 18px',
-                      background: selectedAnswer.consequenceType === 'positive'
-                        ? 'rgba(0,255,135,0.06)'
-                        : selectedAnswer.consequenceType === 'negative'
-                        ? 'rgba(255,71,87,0.06)'
-                        : 'rgba(255,255,255,0.04)',
-                      borderRadius: 12,
-                      border: `1px solid ${selectedAnswer.consequenceType === 'positive'
-                        ? GREEN + '25'
-                        : selectedAnswer.consequenceType === 'negative'
-                        ? RED + '25'
-                        : BORDER}`,
-                      display: 'flex', alignItems: 'center', gap: 14,
-                    }}
-                  >
-                    <span style={{ fontSize: 24, flexShrink: 0 }}>
-                      {selectedAnswer.consequenceType === 'positive' ? '✅'
-                        : selectedAnswer.consequenceType === 'negative' ? '⚠️' : '📋'}
-                    </span>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-                        {selectedAnswer.consequence}
-                      </div>
-                      <div style={{ fontSize: 13, color: GREEN }}>
-                        +{selectedAnswer.bonus.value} {selectedAnswer.bonus.label}
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  <button onClick={advance} style={{
-                    padding: '14px 28px',
-                    background: GREEN,
-                    color: '#000',
-                    border: 'none',
-                    borderRadius: 10,
-                    fontWeight: 700,
-                    fontSize: 15,
-                    cursor: 'pointer',
-                    marginTop: 4,
-                    alignSelf: 'flex-start',
-                  }}>
-                    {currentQ + 1 >= questions.length ? 'See Presser Summary' : 'Next Question →'}
-                  </button>
-                </motion.div>
-              )}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="summary"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
-            >
-              {/* Presser style */}
-              <div style={{ textAlign: 'center', padding: '32px 0 16px' }}>
-                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 3, marginBottom: 12 }}>
-                  YOUR PRESSER STYLE
-                </div>
-                <motion.div
-                  initial={{ scale: 0.8 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: 'spring', bounce: 0.4 }}
-                  style={{
-                    fontSize: 36, fontWeight: 900, letterSpacing: 2,
-                    color: presserStyle === 'FIRED UP COACH' ? RED
-                      : presserStyle === 'FAN FAVORITE' ? GOLD
-                      : presserStyle === 'CALCULATED' ? BLUE : GREEN,
-                  }}
-                >
-                  {presserStyle === 'FIRED UP COACH' ? '⚡' : presserStyle === 'FAN FAVORITE' ? '😄' : presserStyle === 'CALCULATED' ? '📊' : '🏆'} {presserStyle}
-                </motion.div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: C.txt }}>{q.reporter}</div>
+                <div style={{ fontSize: 11, color: C.txtSub }}>Press Row</div>
               </div>
+            </div>
 
-              {/* Tone breakdown */}
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                {selectedTones.map((tone, i) => {
-                  const cfg = TONE_CONFIG[tone];
+            {/* Question card */}
+            <div style={{
+              fontSize: 18, fontWeight: 600, lineHeight: 1.55, color: C.txt,
+              padding: '20px 24px',
+              background: C.surface,
+              borderRadius: 14,
+              border: `1px solid ${C.border}`,
+              borderLeft: `4px solid ${C.borderHi}`,
+            }}>
+              "{q.question}"
+            </div>
+
+            {/* Answer buttons */}
+            {!showAnswer && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.18em', color: C.txtMuted, marginBottom: 2 }}>
+                  CHOOSE YOUR RESPONSE
+                </div>
+                {q.answers.map((ans) => {
+                  const cfg = TONE_CONFIG[ans.tone];
                   return (
-                    <div key={i} style={{
-                      padding: '8px 16px', borderRadius: 20,
-                      background: `${cfg.color}15`,
-                      border: `1px solid ${cfg.color}30`,
-                      color: cfg.color, fontWeight: 700, fontSize: 13,
-                      display: 'flex', gap: 6, alignItems: 'center',
-                    }}>
-                      {cfg.emoji} Q{i + 1}: {cfg.label}
-                    </div>
+                    <motion.button
+                      key={ans.tone}
+                      whileHover={{ x: 4 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => handleAnswer(ans)}
+                      style={{
+                        padding: '16px 20px',
+                        background: `color-mix(in srgb, ${cfg.color} 8%, ${C.surface})`,
+                        border: `1px solid color-mix(in srgb, ${cfg.color} 30%, transparent)`,
+                        borderRadius: 12,
+                        color: C.txt,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        display: 'flex', gap: 16, alignItems: 'flex-start',
+                        transition: 'border-color 140ms, background 140ms',
+                      }}
+                    >
+                      <span style={{ fontSize: 22, flexShrink: 0 }}>{cfg.emoji}</span>
+                      <div>
+                        <div style={{ fontWeight: 800, color: cfg.color, fontSize: 11, letterSpacing: '.1em', marginBottom: 6 }}>
+                          {cfg.label}
+                        </div>
+                        <div style={{ fontSize: 13, color: C.txtSub, lineHeight: 1.5 }}>
+                          {ans.label}
+                        </div>
+                      </div>
+                    </motion.button>
                   );
                 })}
               </div>
+            )}
 
-              {/* Bonuses */}
-              <div style={{ background: SURFACE, borderRadius: 14, padding: 20, border: `1px solid ${BORDER}` }}>
-                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Bonuses Earned</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {totalBonuses.map((b, i) => (
-                    <div key={i} style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '10px 0', borderBottom: `1px solid ${BORDER}`,
-                    }}>
-                      <span style={{ color: 'rgba(255,255,255,0.7)' }}>{b.label}</span>
-                      <span style={{ fontWeight: 700, color: GREEN }}>+{b.value}</span>
-                    </div>
-                  ))}
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    paddingTop: 8, fontWeight: 700,
-                  }}>
-                    <span>Total Bonus Points</span>
-                    <span style={{ color: GREEN, fontSize: 20 }}>
-                      +{totalBonuses.reduce((s, b) => s + b.value, 0)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Headline */}
-              {headline && (
+            {/* Answer reveal */}
+            {showAnswer && selectedAnswer && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+              >
+                {/* Quote */}
                 <div style={{
-                  background: SURFACE, borderRadius: 14, padding: 20, border: `1px solid ${BORDER}`,
+                  padding: '20px 24px',
+                  background: C.surface,
+                  borderRadius: 14,
+                  border: `1px solid ${TONE_CONFIG[selectedAnswer.tone].color}30`,
+                  borderLeft: `4px solid ${TONE_CONFIG[selectedAnswer.tone].color}`,
                 }}>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginBottom: 10 }}>
-                    GENERATED HEADLINE
+                  <div style={{
+                    fontSize: 9, fontWeight: 800, letterSpacing: '.16em',
+                    color: TONE_CONFIG[selectedAnswer.tone].color,
+                    marginBottom: 10,
+                  }}>
+                    YOUR RESPONSE {TONE_CONFIG[selectedAnswer.tone].emoji}
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.4, color: GOLD }}>
-                    "{headline}"
+                  <div style={{ fontSize: 15, lineHeight: 1.7, color: C.txt }}>
+                    "{selectedAnswer.text}"
                   </div>
                 </div>
-              )}
 
-              {/* Return button */}
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button onClick={() => navigate(-1)} style={{
-                  flex: 1, padding: '14px 0',
-                  background: GREEN, color: '#000',
-                  border: 'none', borderRadius: 10,
-                  fontWeight: 700, fontSize: 15, cursor: 'pointer',
-                }}>
-                  ← Return to Game
+                {/* Consequence */}
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.25 }}
+                  style={{
+                    padding: '14px 18px',
+                    background: selectedAnswer.consequenceType === 'positive'
+                      ? C.greenSub
+                      : selectedAnswer.consequenceType === 'negative'
+                      ? C.redSub
+                      : C.blueSub,
+                    borderRadius: 12,
+                    border: `1px solid ${selectedAnswer.consequenceType === 'positive'
+                      ? `${C.green}30`
+                      : selectedAnswer.consequenceType === 'negative'
+                      ? `${C.red}30`
+                      : `${C.blueBright}30`}`,
+                    display: 'flex', alignItems: 'center', gap: 14,
+                  }}
+                >
+                  <span style={{ fontSize: 22, flexShrink: 0 }}>
+                    {selectedAnswer.consequenceType === 'positive' ? '✅'
+                      : selectedAnswer.consequenceType === 'negative' ? '⚠️' : '📋'}
+                  </span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: C.txt, marginBottom: 4 }}>
+                      {selectedAnswer.consequence}
+                    </div>
+                    <div style={{ fontSize: 13, color: C.green, fontWeight: 700 }}>
+                      +{selectedAnswer.bonus.value} {selectedAnswer.bonus.label}
+                    </div>
+                  </div>
+                </motion.div>
+
+                <button
+                  onClick={advance}
+                  style={{
+                    padding: '14px 28px',
+                    background: C.green,
+                    color: '#000',
+                    border: 'none', borderRadius: 10,
+                    fontWeight: 800, fontSize: 14, cursor: 'pointer',
+                    alignSelf: 'flex-start', letterSpacing: '.04em',
+                  }}
+                >
+                  {currentQ + 1 >= questions.length ? 'See Presser Summary →' : 'Next Question →'}
                 </button>
+              </motion.div>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="summary"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
+          >
+            {/* Presser style */}
+            <div style={{
+              textAlign: 'center', padding: '32px 24px 24px',
+              background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16,
+              position: 'relative', overflow: 'hidden',
+            }}>
+              <div style={{
+                position: 'absolute', inset: 0,
+                background: `radial-gradient(ellipse at 50% 100%, ${styleColor}15 0%, transparent 60%)`,
+                pointerEvents: 'none',
+              }} />
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.2em', color: C.txtMuted, marginBottom: 14 }}>
+                YOUR PRESSER STYLE
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
+              <motion.div
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', bounce: 0.4 }}
+                style={{ fontSize: 32, fontWeight: 900, letterSpacing: '.04em', color: styleColor }}
+              >
+                {presserStyle === 'FIRED UP COACH' ? '⚡' : presserStyle === 'FAN FAVORITE' ? '😄' : presserStyle === 'CALCULATED' ? '📊' : '🏆'} {presserStyle}
+              </motion.div>
+            </div>
+
+            {/* Tone breakdown */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {selectedTones.map((tone, i) => {
+                const cfg = TONE_CONFIG[tone];
+                return (
+                  <div key={i} style={{
+                    padding: '8px 16px', borderRadius: 999,
+                    background: `color-mix(in srgb, ${cfg.color} 12%, transparent)`,
+                    border: `1px solid color-mix(in srgb, ${cfg.color} 30%, transparent)`,
+                    color: cfg.color, fontWeight: 700, fontSize: 12,
+                    display: 'flex', gap: 6, alignItems: 'center',
+                  }}>
+                    {cfg.emoji} Q{i + 1}: {cfg.label}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bonuses earned */}
+            <div style={{ background: C.surface, borderRadius: 14, padding: 20, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.txt, marginBottom: 14 }}>Bonuses Earned</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {totalBonuses.map((b, i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 0', borderBottom: `1px solid ${C.border}`,
+                  }}>
+                    <span style={{ color: C.txtSub, fontSize: 13 }}>{b.label}</span>
+                    <span style={{ fontWeight: 700, color: C.green, fontSize: 13 }}>+{b.value}</span>
+                  </div>
+                ))}
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  paddingTop: 12, fontWeight: 700,
+                }}>
+                  <span style={{ color: C.txt }}>Total Bonus Points</span>
+                  <span style={{ color: C.green, fontSize: 22, fontWeight: 900 }}>
+                    +{totalBonuses.reduce((s, b) => s + b.value, 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Generated headline */}
+            {headline && (
+              <div style={{ background: C.surface, borderRadius: 14, padding: 20, border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.18em', color: C.txtMuted, marginBottom: 10 }}>
+                  GENERATED HEADLINE
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.45, color: C.gold }}>
+                  "{headline}"
+                </div>
+              </div>
+            )}
+
+            {/* Return */}
+            <button
+              onClick={() => navigate(-1)}
+              style={{
+                width: '100%', padding: '15px 0',
+                background: C.green, color: '#000',
+                border: 'none', borderRadius: 10,
+                fontWeight: 800, fontSize: 15, cursor: 'pointer', letterSpacing: '.04em',
+              }}
+            >
+              Return to Game
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </AppShell>
   );
 }

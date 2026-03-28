@@ -5,35 +5,7 @@ import { useDraftStore } from '../store/draftStore';
 import { NFL_TEAMS } from '../data/teams';
 import { getPickValue, getPicksValue } from '../data/tradeChart';
 import type { NFLTeam } from '../types/draft';
-
-// ── Color palette ─────────────────────────────────────────────────────────────
-const S = {
-  bg:          '#08090f',
-  surface:     '#0d1220',
-  elevated:    '#111827',
-  card:        '#131f30',
-  border:      '#1a2840',
-  borderHi:    '#223350',
-  txt:         '#d1dce8',
-  txtSub:      '#607898',
-  txtMuted:    '#2e4060',
-  blue:        '#3b7dd8',
-  blueSub:     'rgba(59,125,216,0.10)',
-  gold:        '#c49a1a',
-  goldBright:  '#f59e0b',
-  goldSub:     'rgba(196,154,26,0.10)',
-  green:       '#16a34a',
-  greenBright: '#22c55e',
-  greenSub:    'rgba(22,163,74,0.12)',
-  red:         '#dc2626',
-  redBright:   '#ef4444',
-  redSub:      'rgba(220,38,38,0.12)',
-  yellow:      '#ca8a04',
-  yellowSub:   'rgba(202,138,4,0.12)',
-  accent:      '#4f8ef7',
-  accentSub:   'rgba(79,142,247,0.10)',
-  pulse:       '#22c55e',
-};
+import { C, GLOBAL_CSS } from '../components/AppShell';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ActivityItem {
@@ -70,10 +42,10 @@ function formatTime(): string {
 }
 
 function marketTemp(trades: number): { label: string; color: string; emoji: string; pct: number } {
-  if (trades < 6)  return { label: 'QUIET',  color: S.blue,      emoji: '😴', pct: 15 };
-  if (trades < 16) return { label: 'ACTIVE', color: S.gold,      emoji: '📱', pct: 42 };
-  if (trades < 31) return { label: 'HECTIC', color: S.redBright, emoji: '🔥', pct: 75 };
-  return              { label: 'FRENZY', color: '#ff00ff',    emoji: '💥', pct: 100 };
+  if (trades < 6)  return { label: 'QUIET',  color: C.blueBright, emoji: '😴', pct: 15 };
+  if (trades < 16) return { label: 'ACTIVE', color: C.gold,       emoji: '📱', pct: 42 };
+  if (trades < 31) return { label: 'HECTIC', color: C.amber,      emoji: '🔥', pct: 75 };
+  return              { label: 'FRENZY', color: '#ff00ff',     emoji: '💥', pct: 100 };
 }
 
 function genHeadline(
@@ -113,27 +85,27 @@ function ValueBar({ left, right, max }: { left: number; right: number; max: numb
   const pctR = max > 0 ? Math.min(100, (right / max) * 100) : 0;
   const fair = left > 0 && right > 0 && Math.abs(left - right) / Math.max(left, right) < 0.15;
   const userWins = left > 0 && right > left * 1.05;
-  const barColor = fair ? S.greenBright : userWins ? S.greenBright : S.redBright;
+  const barColor = fair ? C.green : userWins ? C.green : C.red;
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: S.txtSub, marginBottom: 4 }}>
-        <span>You send: <strong style={{ color: left > 0 ? S.txt : S.txtMuted }}>{left} pts</strong></span>
-        <span>You receive: <strong style={{ color: right > 0 ? S.txt : S.txtMuted }}>{right} pts</strong></span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: C.txtSub, marginBottom: 6 }}>
+        <span>You send: <strong style={{ color: left > 0 ? C.txt : C.txtMuted }}>{left} pts</strong></span>
+        <span>You receive: <strong style={{ color: right > 0 ? C.txt : C.txtMuted }}>{right} pts</strong></span>
       </div>
-      <div style={{ height: 8, background: S.elevated, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ height: 8, background: C.border, borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
         <motion.div
           animate={{ width: `${pctL}%` }}
           transition={{ duration: 0.4 }}
-          style={{ position: 'absolute', left: 0, top: 0, height: '100%', background: barColor, borderRadius: 4 }}
+          style={{ position: 'absolute', left: 0, top: 0, height: '100%', background: barColor, borderRadius: 6, opacity: .8 }}
         />
         <motion.div
           animate={{ width: `${pctR}%` }}
           transition={{ duration: 0.4 }}
-          style={{ position: 'absolute', right: 0, top: 0, height: '100%', background: `${barColor}60`, borderRadius: 4 }}
+          style={{ position: 'absolute', right: 0, top: 0, height: '100%', background: `${barColor}50`, borderRadius: 6 }}
         />
       </div>
-      <div style={{ fontSize: 10, marginTop: 4, textAlign: 'center', fontWeight: 700, color: fair ? S.greenBright : userWins ? S.greenBright : S.redBright, minHeight: 14 }}>
+      <div style={{ fontSize: 10, marginTop: 5, textAlign: 'center', fontWeight: 800, color: fair ? C.green : userWins ? C.green : C.red, minHeight: 14 }}>
         {left === 0 && right === 0 ? '' :
           fair ? '✓ Fair trade' :
           userWins ? '✓ You win this trade' :
@@ -163,7 +135,6 @@ export function PreDraftPage() {
   const feedRef = useRef<HTMLDivElement>(null);
   const breakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Use a ref so the timer callback always reads the latest session without re-scheduling
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const isHecticRef = useRef(false);
@@ -363,12 +334,18 @@ export function PreDraftPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: S.bg,
-      color: S.txt,
+      background: C.bg,
+      color: C.txt,
       display: 'flex',
       flexDirection: 'column',
-      fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif",
+      fontFamily: C.font,
     }}>
+      <style>{GLOBAL_CSS}{`
+        @keyframes ticker-scroll {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
 
       {/* ── BREAKING TRADE BANNER ─────────────────────────────────────────── */}
       <AnimatePresence>
@@ -380,17 +357,13 @@ export function PreDraftPage() {
             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             style={{
               position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
+              top: 0, left: 0, right: 0,
               zIndex: 1000,
               background: 'linear-gradient(135deg, #7f1d1d, #dc2626)',
-              borderBottom: '2px solid #ef4444',
-              padding: '12px 24px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              boxShadow: '0 8px 40px rgba(220,38,38,0.5)',
+              borderBottom: `2px solid ${C.red}`,
+              padding: '13px 24px',
+              display: 'flex', alignItems: 'center', gap: 12,
+              boxShadow: `0 8px 40px rgba(220,38,38,0.5)`,
             }}
           >
             <span style={{ fontSize: 18 }}>🚨</span>
@@ -413,30 +386,24 @@ export function PreDraftPage() {
       {/* ── SCROLLING TICKER ─────────────────────────────────────────────── */}
       <div style={{
         height: 32,
-        background: '#050810',
-        borderBottom: `1px solid ${S.border}`,
+        background: '#030508',
+        borderBottom: `1px solid ${C.border}`,
         overflow: 'hidden',
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
         flexShrink: 0,
       }}>
-        <style>{`
-          @keyframes ticker-scroll {
-            0%   { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-          }
-        `}</style>
         {/* Left fade + LIVE badge */}
         <div style={{
-          position: 'absolute', left: 0, top: 0, height: '100%', width: 80, zIndex: 2,
-          background: 'linear-gradient(90deg, #050810 60%, transparent)',
-          display: 'flex', alignItems: 'center', padding: '0 10px',
+          position: 'absolute', left: 0, top: 0, height: '100%', width: 90, zIndex: 2,
+          background: 'linear-gradient(90deg, #030508 65%, transparent)',
+          display: 'flex', alignItems: 'center', padding: '0 12px',
         }}>
           <motion.span
             animate={{ opacity: [1, 0.4, 1] }}
             transition={{ repeat: Infinity, duration: 1.2 }}
-            style={{ fontSize: 9, fontWeight: 900, color: S.redBright, letterSpacing: '0.15em', whiteSpace: 'nowrap' }}
+            style={{ fontSize: 9, fontWeight: 900, color: C.red, letterSpacing: '0.15em', whiteSpace: 'nowrap' }}
           >
             ⚡ LIVE
           </motion.span>
@@ -445,14 +412,14 @@ export function PreDraftPage() {
         {tickerText ? (
           <div style={{
             display: 'flex', alignItems: 'center', whiteSpace: 'nowrap',
-            paddingLeft: 90,
+            paddingLeft: 100,
             animation: 'ticker-scroll 80s linear infinite',
           }}>
-            <span style={{ fontSize: 11, color: S.txtSub, paddingRight: 80 }}>{tickerText}</span>
-            <span style={{ fontSize: 11, color: S.txtSub, paddingRight: 80 }}>{tickerText}</span>
+            <span style={{ fontSize: 11, color: C.txtSub, paddingRight: 80 }}>{tickerText}</span>
+            <span style={{ fontSize: 11, color: C.txtSub, paddingRight: 80 }}>{tickerText}</span>
           </div>
         ) : (
-          <span style={{ paddingLeft: 90, fontSize: 11, color: S.txtMuted }}>
+          <span style={{ paddingLeft: 100, fontSize: 11, color: C.txtMuted }}>
             Monitoring phone lines...
           </span>
         )}
@@ -460,25 +427,35 @@ export function PreDraftPage() {
 
       {/* ── TOP NAV ───────────────────────────────────────────────────────── */}
       <div style={{
-        background: S.surface,
-        borderBottom: `1px solid ${S.border}`,
+        background: `rgba(5,8,15,.95)`,
+        backdropFilter: 'blur(14px)',
+        borderBottom: `1px solid ${C.border}`,
         padding: '0 20px',
-        height: 52,
+        height: 56,
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        gap: 14,
         flexShrink: 0,
       }}>
         <button
           onClick={() => navigate('/draft/select')}
-          style={{ background: 'none', border: 'none', color: S.txtSub, cursor: 'pointer', fontSize: 12, flexShrink: 0 }}
+          style={{
+            background: 'none', border: `1px solid ${C.border}`,
+            borderRadius: 8, color: C.txtSub, cursor: 'pointer',
+            fontSize: 12, fontWeight: 700, padding: '6px 12px',
+            display: 'flex', alignItems: 'center', gap: 6,
+            transition: 'border-color 160ms, color 160ms', flexShrink: 0,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.borderHi; (e.currentTarget as HTMLButtonElement).style.color = C.txt; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.txtSub; }}
         >
           ← Back
         </button>
-        <div style={{ width: 1, height: 18, background: S.border, flexShrink: 0 }} />
 
-        <div style={{ fontSize: 13, fontWeight: 900, fontFamily: 'Impact, sans-serif', letterSpacing: '0.08em', color: S.txt, whiteSpace: 'nowrap' }}>
-          GridironIQ Pre-Draft War Room
+        <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0 }} />
+
+        <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: '.06em', color: C.txt, whiteSpace: 'nowrap' }}>
+          Pre-Draft <span style={{ color: C.gold }}>War Room</span>
         </div>
 
         <div style={{ flex: 1 }} />
@@ -486,44 +463,39 @@ export function PreDraftPage() {
         {/* Team badge */}
         {userTeam && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: S.elevated, border: `1px solid ${S.border}`,
-            borderRadius: 8, padding: '4px 10px', flexShrink: 0,
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: C.surface, border: `1px solid ${C.border}`,
+            borderRadius: 10, padding: '6px 12px', flexShrink: 0,
           }}>
             <div style={{
-              width: 22, height: 22, borderRadius: '50%',
-              background: userTeam.primaryColor,
+              width: 24, height: 24, borderRadius: 6,
+              background: `${userTeam.primaryColor}30`,
+              border: `1px solid ${userTeam.primaryColor}60`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 7, fontWeight: 900, color: userTeam.secondaryColor,
-              fontFamily: 'Impact, sans-serif',
+              fontSize: 7, fontWeight: 900, color: userTeam.primaryColor,
             }}>
               {userTeam.abbreviation}
             </div>
-            <span style={{ fontSize: 11, fontWeight: 600, color: S.txt }}>{userTeam.city} {userTeam.name}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.txt }}>{userTeam.city} {userTeam.name}</span>
           </div>
         )}
 
         {/* Activity badge */}
         <motion.div
-          animate={{ scale: [1, 1.04, 1] }}
+          animate={{ scale: [1, 1.03, 1] }}
           transition={{ repeat: Infinity, duration: 2.2 }}
           style={{
-            background: totalTradesExecuted > 0 ? `${temp.color}18` : S.elevated,
-            border: `1px solid ${totalTradesExecuted > 0 ? temp.color + '50' : S.border}`,
-            borderRadius: 8,
-            padding: '4px 10px',
-            fontSize: 11,
-            fontWeight: 700,
-            color: totalTradesExecuted > 0 ? temp.color : S.txtMuted,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            flexShrink: 0,
+            background: totalTradesExecuted > 0 ? `${temp.color}18` : C.surface,
+            border: `1px solid ${totalTradesExecuted > 0 ? temp.color + '50' : C.border}`,
+            borderRadius: 10, padding: '6px 12px',
+            fontSize: 11, fontWeight: 700,
+            color: totalTradesExecuted > 0 ? temp.color : C.txtMuted,
+            display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
           }}
         >
           <span style={{
             width: 6, height: 6, borderRadius: '50%',
-            background: totalTradesExecuted > 0 ? temp.color : S.txtMuted,
+            background: totalTradesExecuted > 0 ? temp.color : C.txtMuted,
             display: 'inline-block',
             boxShadow: totalTradesExecuted > 0 ? `0 0 6px ${temp.color}` : 'none',
           }} />
@@ -535,16 +507,11 @@ export function PreDraftPage() {
           whileTap={{ scale: 0.97 }}
           onClick={() => navigate('/draft/board')}
           style={{
-            background: `linear-gradient(135deg, ${S.accent}, #6366f1)`,
-            border: 'none',
-            color: '#fff',
-            borderRadius: 8,
-            padding: '8px 16px',
-            fontSize: 12,
-            fontWeight: 700,
-            cursor: 'pointer',
-            letterSpacing: '0.05em',
-            flexShrink: 0,
+            background: `linear-gradient(135deg, ${C.blueBright}, #6366f1)`,
+            border: 'none', color: '#fff', borderRadius: 10,
+            padding: '9px 18px', fontSize: 12, fontWeight: 800,
+            cursor: 'pointer', letterSpacing: '0.04em', flexShrink: 0,
+            boxShadow: `0 0 20px -6px ${C.blueBright}80`,
           }}
         >
           Enter Draft Room →
@@ -554,22 +521,22 @@ export function PreDraftPage() {
       {/* ── THREE PANELS ─────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
-        {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
+        {/* ── LEFT PANEL: Your Picks ──────────────────────────────────────── */}
         <div style={{
-          width: 220,
+          width: 230,
           flexShrink: 0,
-          borderRight: `1px solid ${S.border}`,
-          background: S.surface,
+          borderRight: `1px solid ${C.border}`,
+          background: C.surface,
           display: 'flex',
           flexDirection: 'column',
           overflowY: 'auto',
         }}>
-          <div style={{ padding: '14px 14px 0' }}>
-            <div style={{ fontSize: 10, color: S.txtMuted, letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 10 }}>
+          <div style={{ padding: '16px 14px 0' }}>
+            <div style={{ fontSize: 9, color: C.txtMuted, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 12 }}>
               Your Picks
             </div>
             {userPicksList.length === 0 ? (
-              <div style={{ fontSize: 11, color: S.txtMuted, textAlign: 'center', padding: '20px 0' }}>
+              <div style={{ fontSize: 11, color: C.txtMuted, textAlign: 'center', padding: '20px 0' }}>
                 No picks remaining
               </div>
             ) : (
@@ -580,26 +547,27 @@ export function PreDraftPage() {
                   const isEarly = overall <= 10;
                   return (
                     <div key={overall} style={{
-                      background: isEarly ? `${S.gold}18` : S.elevated,
-                      border: `1px solid ${isEarly ? S.gold + '50' : S.border}`,
-                      borderRadius: 8,
-                      padding: '7px 10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
+                      background: isEarly ? `${C.gold}12` : C.elevated,
+                      border: `1px solid ${isEarly ? C.gold + '40' : C.border}`,
+                      borderRadius: 10,
+                      padding: '8px 12px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      position: 'relative', overflow: 'hidden',
                     }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: isEarly ? S.goldBright : S.txt }}>
+                      {isEarly && (
+                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: C.gold, borderRadius: '10px 0 0 10px' }} />
+                      )}
+                      <div style={{ paddingLeft: isEarly ? 6 : 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: isEarly ? C.goldBright : C.txt }}>
                           {getPickLabelShort(overall)}
                         </div>
-                        <div style={{ fontSize: 9, color: S.txtMuted }}>Round {round}</div>
+                        <div style={{ fontSize: 9, color: C.txtMuted, marginTop: 1 }}>Round {round}</div>
                       </div>
                       <span style={{
-                        fontSize: 10, fontWeight: 700,
-                        color: isEarly ? S.goldBright : S.txtSub,
-                        background: isEarly ? S.goldSub : 'transparent',
-                        borderRadius: 4,
-                        padding: isEarly ? '2px 5px' : '0',
+                        fontSize: 11, fontWeight: 700,
+                        color: isEarly ? C.goldBright : C.txtSub,
+                        background: isEarly ? C.goldSub : 'transparent',
+                        borderRadius: 5, padding: isEarly ? '2px 6px' : '0',
                       }}>
                         {val}
                       </span>
@@ -613,50 +581,57 @@ export function PreDraftPage() {
           <div style={{ flex: 1 }} />
 
           {/* Market temperature */}
-          <div style={{ borderTop: `1px solid ${S.border}`, padding: '14px', marginTop: 12 }}>
-            <div style={{ fontSize: 10, color: S.txtMuted, letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 10 }}>
+          <div style={{ borderTop: `1px solid ${C.border}`, padding: '16px 14px', marginTop: 12 }}>
+            <div style={{ fontSize: 9, color: C.txtMuted, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 12 }}>
               Market Temp
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 20 }}>{temp.emoji}</span>
-              <span style={{ fontSize: 15, fontWeight: 900, color: temp.color, fontFamily: 'Impact, sans-serif', letterSpacing: '0.05em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 22 }}>{temp.emoji}</span>
+              <span style={{ fontSize: 16, fontWeight: 900, color: temp.color, letterSpacing: '0.04em' }}>
                 {temp.label}
               </span>
             </div>
-            <div style={{ height: 8, background: S.elevated, borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
+            <div style={{ height: 8, background: C.border, borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
               <motion.div
                 animate={{ width: `${temp.pct}%` }}
                 transition={{ duration: 0.8, ease: 'easeOut' }}
                 style={{
                   height: '100%',
-                  background: `linear-gradient(90deg, ${S.blue}, ${temp.color})`,
-                  borderRadius: 4,
+                  background: `linear-gradient(90deg, ${C.blueBright}, ${temp.color})`,
+                  borderRadius: 6,
                   boxShadow: `0 0 8px ${temp.color}60`,
                 }}
               />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: S.txtMuted, marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: C.txtMuted, marginBottom: 12 }}>
               <span>Quiet</span>
               <span>Frenzy</span>
             </div>
-            <div style={{ fontSize: 10, color: S.txtSub, lineHeight: 1.6 }}>
-              <div><span style={{ color: S.greenBright, fontWeight: 700 }}>{totalTradesExecuted}</span> trades executed</div>
-              <div><span style={{ color: S.yellow, fontWeight: 700 }}>{totalRumors}</span> rumors today</div>
+            <div style={{ fontSize: 11, color: C.txtSub, lineHeight: 1.8 }}>
+              <div><span style={{ color: C.green, fontWeight: 800 }}>{totalTradesExecuted}</span> trades executed</div>
+              <div><span style={{ color: C.amber, fontWeight: 800 }}>{totalRumors}</span> rumors today</div>
             </div>
           </div>
         </div>
 
-        {/* ── CENTER PANEL ───────────────────────────────────────────────── */}
+        {/* ── CENTER PANEL: Trade Desk ───────────────────────────────────── */}
         <div style={{ flex: 1, overflow: 'auto', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '16px 18px' }}>
-            <div style={{ fontSize: 10, color: S.txtMuted, letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 12 }}>
-              {selectedTeam
-                ? `Trading with ${selectedTeam.city} ${selectedTeam.name}`
-                : 'Select a team to propose a trade'}
+          <div style={{ padding: '18px 20px' }}>
+
+            {/* Panel header */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 9, color: C.txtMuted, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 800, marginBottom: 4 }}>
+                Trade Desk
+              </div>
+              <div style={{ fontSize: 13, color: selectedTeam ? C.txt : C.txtSub, fontWeight: 600 }}>
+                {selectedTeam
+                  ? `Trading with ${selectedTeam.city} ${selectedTeam.name}`
+                  : 'Select a team below to propose a trade'}
+              </div>
             </div>
 
             {/* Team grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7, marginBottom: 22 }}>
               {NFL_TEAMS.map(team => {
                 const isUser = team.id === session.userTeamId;
                 const isSelected = selectedTeam?.id === team.id;
@@ -669,44 +644,42 @@ export function PreDraftPage() {
                     onClick={() => !isUser && handleTeamClick(team)}
                     style={{
                       background: isSelected
-                        ? `${team.primaryColor}30`
-                        : isUser ? `${team.primaryColor}15`
-                        : S.elevated,
+                        ? `${team.primaryColor}28`
+                        : isUser ? `${team.primaryColor}12`
+                        : C.elevated,
                       border: `1px solid ${
-                        isSelected ? team.primaryColor + '90'
-                        : isUser ? team.primaryColor + '40'
-                        : S.border
+                        isSelected ? team.primaryColor + '80'
+                        : isUser ? team.primaryColor + '30'
+                        : C.border
                       }`,
-                      borderRadius: 8,
-                      padding: '8px 6px',
+                      borderRadius: 10,
+                      padding: '10px 8px',
                       cursor: isUser ? 'default' : 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      opacity: isUser ? 0.7 : 1,
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                      opacity: isUser ? 0.65 : 1,
                       position: 'relative',
                       transition: 'all 0.12s',
+                      boxShadow: isSelected ? `0 0 16px -4px ${team.primaryColor}60` : 'none',
                     }}
                   >
                     {isUser && (
-                      <div style={{ position: 'absolute', top: 3, right: 4, fontSize: 7, color: S.goldBright, fontWeight: 700 }}>
+                      <div style={{ position: 'absolute', top: 3, right: 5, fontSize: 7, color: C.goldBright, fontWeight: 800 }}>
                         YOU
                       </div>
                     )}
                     <div style={{
-                      width: 30, height: 30, borderRadius: '50%',
-                      background: team.primaryColor,
+                      width: 32, height: 32, borderRadius: 8,
+                      background: `${team.primaryColor}25`,
+                      border: `1px solid ${team.primaryColor}50`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 8, fontWeight: 900, color: team.secondaryColor,
-                      fontFamily: 'Impact, sans-serif',
+                      fontSize: 8, fontWeight: 900, color: team.primaryColor,
                     }}>
                       {team.abbreviation}
                     </div>
-                    <div style={{ fontSize: 9, color: isSelected ? S.txt : S.txtSub, textAlign: 'center', lineHeight: 1.2 }}>
+                    <div style={{ fontSize: 9, color: isSelected ? C.txt : C.txtSub, textAlign: 'center', lineHeight: 1.2, fontWeight: 600 }}>
                       {team.abbreviation}
                     </div>
-                    <div style={{ fontSize: 8, color: S.txtMuted }}>{picks.length} picks</div>
+                    <div style={{ fontSize: 8, color: C.txtMuted }}>{picks.length} picks</div>
                   </motion.button>
                 );
               })}
@@ -722,51 +695,58 @@ export function PreDraftPage() {
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
                   style={{
-                    background: S.card,
-                    border: `1px solid ${S.borderHi}`,
+                    background: C.surface,
+                    border: `1px solid ${C.borderHi}`,
                     borderTop: `3px solid ${selectedTeam.primaryColor}`,
-                    borderRadius: 12,
-                    padding: '18px',
+                    borderRadius: 14,
+                    padding: '20px',
+                    position: 'relative',
+                    overflow: 'hidden',
                   }}
                 >
+                  {/* Accent glow */}
+                  <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${selectedTeam.primaryColor}08 0%, transparent 50%)`, pointerEvents: 'none' }} />
+
                   {/* Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, position: 'relative' }}>
                     <div style={{
-                      width: 36, height: 36, borderRadius: '50%',
-                      background: selectedTeam.primaryColor,
+                      width: 44, height: 44, borderRadius: 10,
+                      background: `${selectedTeam.primaryColor}25`,
+                      border: `1px solid ${selectedTeam.primaryColor}60`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 9, fontWeight: 900, color: selectedTeam.secondaryColor,
-                      fontFamily: 'Impact, sans-serif',
+                      fontSize: 10, fontWeight: 900, color: selectedTeam.primaryColor,
                     }}>
                       {selectedTeam.abbreviation}
                     </div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: S.txt }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: C.txt, letterSpacing: '-.01em' }}>
                         {selectedTeam.city} {selectedTeam.name}
                       </div>
-                      <div style={{ fontSize: 10, color: S.txtSub }}>
+                      <div style={{ fontSize: 11, color: C.txtSub, marginTop: 2 }}>
                         {getTeamPicks(selectedTeam.id).length} picks available
                       </div>
                     </div>
                     <button
                       onClick={() => { setSelectedTeam(null); setUserSendPicks([]); setTheirSendPicks([]); setTradeResult(null); }}
-                      style={{ marginLeft: 'auto', background: 'none', border: 'none', color: S.txtMuted, cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 0 }}
+                      style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.txtMuted, cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: 0, transition: 'color 120ms' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.txt; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.txtMuted; }}
                     >
                       ×
                     </button>
                   </div>
 
                   {/* Pick selectors */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16, position: 'relative' }}>
                     {/* You send */}
                     <div>
-                      <div style={{ fontSize: 10, color: S.red, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: C.red, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>
                         You Send
                       </div>
                       {userPicksList.length === 0 ? (
-                        <div style={{ fontSize: 11, color: S.txtMuted }}>No picks</div>
+                        <div style={{ fontSize: 11, color: C.txtMuted }}>No picks</div>
                       ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto' }}>
                           {userPicksList.map(overall => {
                             const checked = userSendPicks.includes(overall);
                             return (
@@ -774,21 +754,17 @@ export function PreDraftPage() {
                                 key={overall}
                                 onClick={() => toggleUserPick(overall)}
                                 style={{
-                                  background: checked ? S.redSub : S.elevated,
-                                  border: `1px solid ${checked ? S.red + '80' : S.border}`,
-                                  borderRadius: 6,
-                                  padding: '6px 10px',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
+                                  background: checked ? `${C.red}18` : C.elevated,
+                                  border: `1px solid ${checked ? C.red + '70' : C.border}`,
+                                  borderRadius: 8, padding: '8px 12px', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                   transition: 'all 0.12s',
                                 }}
                               >
-                                <span style={{ fontSize: 11, fontWeight: 600, color: checked ? S.redBright : S.txt }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: checked ? C.red : C.txt }}>
                                   {getPickLabel(overall)}
                                 </span>
-                                <span style={{ fontSize: 10, color: S.txtMuted }}>{getPickValue(overall)}</span>
+                                <span style={{ fontSize: 10, color: C.txtMuted }}>{getPickValue(overall)}</span>
                               </button>
                             );
                           })}
@@ -798,13 +774,13 @@ export function PreDraftPage() {
 
                     {/* You receive */}
                     <div>
-                      <div style={{ fontSize: 10, color: S.greenBright, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: C.green, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>
                         You Receive
                       </div>
                       {getTeamPicks(selectedTeam.id).length === 0 ? (
-                        <div style={{ fontSize: 11, color: S.txtMuted }}>No picks available</div>
+                        <div style={{ fontSize: 11, color: C.txtMuted }}>No picks available</div>
                       ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto' }}>
                           {getTeamPicks(selectedTeam.id).map(overall => {
                             const checked = theirSendPicks.includes(overall);
                             return (
@@ -812,21 +788,17 @@ export function PreDraftPage() {
                                 key={overall}
                                 onClick={() => toggleTheirPick(overall)}
                                 style={{
-                                  background: checked ? S.greenSub : S.elevated,
-                                  border: `1px solid ${checked ? S.green + '80' : S.border}`,
-                                  borderRadius: 6,
-                                  padding: '6px 10px',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
+                                  background: checked ? `${C.green}14` : C.elevated,
+                                  border: `1px solid ${checked ? C.green + '70' : C.border}`,
+                                  borderRadius: 8, padding: '8px 12px', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                   transition: 'all 0.12s',
                                 }}
                               >
-                                <span style={{ fontSize: 11, fontWeight: 600, color: checked ? S.greenBright : S.txt }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: checked ? C.green : C.txt }}>
                                   {getPickLabel(overall)}
                                 </span>
-                                <span style={{ fontSize: 10, color: S.txtMuted }}>{getPickValue(overall)}</span>
+                                <span style={{ fontSize: 10, color: C.txtMuted }}>{getPickValue(overall)}</span>
                               </button>
                             );
                           })}
@@ -836,7 +808,7 @@ export function PreDraftPage() {
                   </div>
 
                   {/* Value bar */}
-                  <div style={{ marginBottom: 14 }}>
+                  <div style={{ marginBottom: 16, position: 'relative' }}>
                     <ValueBar left={sendValue} right={receiveValue} max={maxVal} />
                   </div>
 
@@ -845,8 +817,6 @@ export function PreDraftPage() {
                     {tradeResult === null ? (
                       <motion.button
                         key="propose"
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         onClick={handleProposeTrade}
@@ -854,17 +824,26 @@ export function PreDraftPage() {
                         style={{
                           width: '100%',
                           background: userSendPicks.length && theirSendPicks.length
-                            ? `linear-gradient(135deg, ${S.accent}, #6366f1)`
-                            : S.elevated,
+                            ? `linear-gradient(135deg, ${C.blueBright}, #6366f1)`
+                            : C.elevated,
                           border: 'none',
-                          color: userSendPicks.length && theirSendPicks.length ? '#fff' : S.txtMuted,
-                          borderRadius: 8,
-                          padding: '11px',
-                          fontSize: 13,
-                          fontWeight: 700,
+                          color: userSendPicks.length && theirSendPicks.length ? '#fff' : C.txtMuted,
+                          borderRadius: 10, padding: '13px',
+                          fontSize: 13, fontWeight: 800,
                           cursor: userSendPicks.length && theirSendPicks.length ? 'pointer' : 'not-allowed',
-                          letterSpacing: '0.05em',
-                          transition: 'all 0.15s',
+                          letterSpacing: '0.06em', transition: 'all 0.15s',
+                          boxShadow: userSendPicks.length && theirSendPicks.length
+                            ? `0 0 20px -6px ${C.blueBright}80` : 'none',
+                        }}
+                        onMouseEnter={e => {
+                          if (userSendPicks.length && theirSendPicks.length) {
+                            (e.currentTarget as HTMLButtonElement).style.opacity = '.85';
+                            (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          (e.currentTarget as HTMLButtonElement).style.opacity = '1';
+                          (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
                         }}
                       >
                         PROPOSE TRADE
@@ -875,17 +854,19 @@ export function PreDraftPage() {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         style={{
-                          background: tradeResult === 'accepted' ? S.greenSub : S.redSub,
-                          border: `1px solid ${tradeResult === 'accepted' ? S.green + '80' : S.red + '80'}`,
-                          borderRadius: 8,
-                          padding: '12px',
-                          textAlign: 'center',
+                          background: tradeResult === 'accepted' ? `${C.green}12` : `${C.red}12`,
+                          border: `1px solid ${tradeResult === 'accepted' ? C.green + '60' : C.red + '60'}`,
+                          borderRadius: 10, padding: '16px', textAlign: 'center',
                         }}
                       >
-                        <div style={{ fontSize: 14, fontWeight: 900, color: tradeResult === 'accepted' ? S.greenBright : S.redBright, fontFamily: 'Impact, sans-serif', letterSpacing: '0.05em' }}>
+                        <div style={{
+                          fontSize: 16, fontWeight: 900,
+                          color: tradeResult === 'accepted' ? C.green : C.red,
+                          letterSpacing: '0.04em', marginBottom: 6,
+                        }}>
                           {tradeResult === 'accepted' ? '✓ TRADE ACCEPTED' : '✗ TRADE REJECTED'}
                         </div>
-                        <div style={{ fontSize: 11, color: S.txtSub, marginTop: 4 }}>
+                        <div style={{ fontSize: 12, color: C.txtSub, marginBottom: 12, lineHeight: 1.5 }}>
                           {tradeResult === 'accepted'
                             ? 'Deal is done. Check your updated picks.'
                             : 'They want more value. Try adding a pick.'}
@@ -893,10 +874,13 @@ export function PreDraftPage() {
                         <button
                           onClick={() => setTradeResult(null)}
                           style={{
-                            marginTop: 8, background: 'none', border: `1px solid ${S.border}`,
-                            color: S.txtSub, borderRadius: 6, padding: '4px 14px',
-                            fontSize: 11, cursor: 'pointer', fontWeight: 600,
+                            background: 'none', border: `1px solid ${C.border}`,
+                            color: C.txtSub, borderRadius: 8, padding: '6px 18px',
+                            fontSize: 12, cursor: 'pointer', fontWeight: 700,
+                            transition: 'border-color 160ms',
                           }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.borderHi; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
                         >
                           Try Again
                         </button>
@@ -909,34 +893,31 @@ export function PreDraftPage() {
           </div>
         </div>
 
-        {/* ── RIGHT PANEL: Live feed ──────────────────────────────────────── */}
+        {/* ── RIGHT PANEL: Live Feed ─────────────────────────────────────── */}
         <div style={{
-          width: 280,
+          width: 290,
           flexShrink: 0,
-          borderLeft: `1px solid ${S.border}`,
-          background: S.surface,
+          borderLeft: `1px solid ${C.border}`,
+          background: C.surface,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
         }}>
           {/* Feed header */}
           <div style={{
-            padding: '12px 14px',
-            borderBottom: `1px solid ${S.border}`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexShrink: 0,
+            padding: '14px 16px', borderBottom: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+            background: C.panel,
           }}>
             <motion.div
               animate={{ opacity: [1, 0.2, 1] }}
               transition={{ repeat: Infinity, duration: 1.4 }}
-              style={{ width: 8, height: 8, borderRadius: '50%', background: S.pulse, flexShrink: 0 }}
+              style={{ width: 8, height: 8, borderRadius: '50%', background: C.green, flexShrink: 0, boxShadow: `0 0 6px ${C.green}` }}
             />
-            <span style={{ fontSize: 12, fontWeight: 700, color: S.txt }}>⚡ War Room Feed</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: C.txt }}>War Room Feed</span>
             <div style={{
-              marginLeft: 'auto', fontSize: 10, color: S.txtMuted,
-              background: S.elevated, borderRadius: 4, padding: '2px 6px',
+              marginLeft: 'auto', fontSize: 10, color: C.txtMuted,
+              background: C.elevated, borderRadius: 6, padding: '2px 8px', fontWeight: 700,
             }}>
               {activityFeed.length}
             </div>
@@ -944,17 +925,14 @@ export function PreDraftPage() {
 
           {/* Count summary */}
           <div style={{
-            padding: '7px 14px',
-            borderBottom: `1px solid ${S.border}`,
-            display: 'flex',
-            gap: 10,
-            flexShrink: 0,
+            padding: '8px 16px', borderBottom: `1px solid ${C.border}`,
+            display: 'flex', gap: 12, flexShrink: 0,
           }}>
-            <span style={{ fontSize: 10, color: S.greenBright, fontWeight: 700 }}>
+            <span style={{ fontSize: 10, color: C.green, fontWeight: 800 }}>
               {totalTradesExecuted} trades
             </span>
-            <span style={{ fontSize: 10, color: S.txtMuted }}>·</span>
-            <span style={{ fontSize: 10, color: S.yellow, fontWeight: 700 }}>
+            <span style={{ fontSize: 10, color: C.txtMuted }}>·</span>
+            <span style={{ fontSize: 10, color: C.amber, fontWeight: 800 }}>
               {totalRumors} rumors today
             </span>
           </div>
@@ -962,8 +940,8 @@ export function PreDraftPage() {
           {/* Feed items */}
           <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
             {activityFeed.length === 0 ? (
-              <div style={{ padding: '24px 14px', textAlign: 'center', color: S.txtMuted, fontSize: 12 }}>
-                <div style={{ fontSize: 22, marginBottom: 8 }}>📡</div>
+              <div style={{ padding: '28px 16px', textAlign: 'center', color: C.txtMuted, fontSize: 12 }}>
+                <div style={{ fontSize: 24, marginBottom: 10 }}>📡</div>
                 Monitoring phone lines...
               </div>
             ) : (
@@ -971,15 +949,15 @@ export function PreDraftPage() {
                 {activityFeed.map((item, i) => {
                   const isNew = i === 0;
                   const borderColor =
-                    item.type === 'trade' ? S.greenBright :
-                    item.type === 'rumor' ? S.yellow :
-                    item.type === 'breakdown' ? S.redBright :
-                    S.blue;
+                    item.type === 'trade' ? C.green :
+                    item.type === 'rumor' ? C.amber :
+                    item.type === 'breakdown' ? C.red :
+                    C.blueBright;
                   const bgColor =
-                    item.type === 'trade' ? S.greenSub :
-                    item.type === 'rumor' ? S.yellowSub :
-                    item.type === 'breakdown' ? S.redSub :
-                    S.accentSub;
+                    item.type === 'trade' ? `${C.green}12` :
+                    item.type === 'rumor' ? `${C.amber}10` :
+                    item.type === 'breakdown' ? `${C.red}10` :
+                    C.blueSub;
 
                   return (
                     <motion.div
@@ -988,34 +966,32 @@ export function PreDraftPage() {
                       animate={{ opacity: 1, x: 0, height: 'auto' }}
                       transition={{ duration: 0.22 }}
                       style={{
-                        margin: '0 8px 4px',
-                        padding: '8px 10px',
+                        margin: '0 10px 5px',
+                        padding: '10px 12px',
                         background: bgColor,
-                        border: `1px solid ${borderColor}25`,
+                        border: `1px solid ${borderColor}22`,
                         borderLeft: `3px solid ${borderColor}`,
-                        borderRadius: 8,
+                        borderRadius: 10,
                         overflow: 'hidden',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: item.type === 'trade' ? 4 : 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: item.type === 'trade' ? 5 : 0 }}>
                         <span style={{
-                          flex: 1,
-                          fontSize: 11,
+                          flex: 1, fontSize: 11,
                           fontWeight: item.type === 'trade' ? 800 : 500,
-                          color: item.type === 'trade' ? S.txt : S.txtSub,
+                          color: item.type === 'trade' ? C.txt : C.txtSub,
                           fontStyle: item.type === 'rumor' ? 'italic' : 'normal',
-                          lineHeight: 1.35,
-                          textDecoration: item.type === 'breakdown' ? 'none' : 'none',
                           opacity: item.type === 'breakdown' ? 0.7 : 1,
+                          lineHeight: 1.4,
                         }}>
                           {item.headline}
                         </span>
                         {item.type === 'trade' && (
                           <span style={{
-                            fontSize: 8, fontWeight: 900, color: S.greenBright,
-                            background: S.greenSub, border: `1px solid ${S.green}60`,
-                            borderRadius: 3, padding: '1px 5px', letterSpacing: '0.08em',
-                            flexShrink: 0, marginTop: 2,
+                            fontSize: 8, fontWeight: 900, color: C.green,
+                            background: `${C.green}18`, border: `1px solid ${C.green}50`,
+                            borderRadius: 4, padding: '2px 6px', letterSpacing: '0.08em',
+                            flexShrink: 0, marginTop: 1,
                           }}>
                             DONE
                           </span>
@@ -1023,18 +999,18 @@ export function PreDraftPage() {
                       </div>
 
                       {item.type === 'trade' && (
-                        <div style={{ fontSize: 9, color: S.txtMuted, display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 2 }}>
-                          <span style={{ color: S.red + 'bb' }}>
+                        <div style={{ fontSize: 9, color: C.txtMuted, display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 3 }}>
+                          <span style={{ color: C.red + 'cc' }}>
                             {item.team1Abbr}: {item.picks1.map(p => getPickLabelShort(p)).join(', ')}
                           </span>
                           <span>→</span>
-                          <span style={{ color: S.greenBright + 'bb' }}>
+                          <span style={{ color: C.green + 'cc' }}>
                             {item.team2Abbr}: {item.picks2.map(p => getPickLabelShort(p)).join(', ')}
                           </span>
                         </div>
                       )}
 
-                      <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 2 }}>
+                      <div style={{ fontSize: 9, color: C.txtMuted, marginTop: 3 }}>
                         {item.time}
                       </div>
                     </motion.div>
