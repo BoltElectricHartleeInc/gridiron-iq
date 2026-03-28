@@ -1,325 +1,451 @@
-import { API_BASE } from '../lib/api';
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { useDraftStore } from '../store/draftStore';
+import type { CSSProperties } from 'react';
+import { useMemo } from 'react';
+import { T, gradeColor, gradeLetter, teamLogoUrl } from '../styles/tokens';
 
-const S = {
-  bg:       '#0b0f18',
-  surface:  '#0f1623',
-  elevated: '#141d2e',
-  border:   '#1c2d40',
-  txt:      '#cdd8e8',
-  txtSub:   '#6b82a0',
-  txtMuted: '#334560',
-  blue:     '#3b7dd8',
-  blueSub:  'rgba(59,125,216,0.10)',
-  gold:     '#c49a1a',
-  goldSub:  'rgba(196,154,26,0.10)',
-  green:    '#1e8c4e',
-  greenSub: 'rgba(30,140,78,0.10)',
+type ActiveDraftSession = {
+  teamAbbreviation: string;
+  teamName: string;
+  teamPrimaryColor: string;
+  currentOverallPick: number;
+  currentRound: number;
+  pickInRound: number;
 };
 
-interface RecentDraft {
-  id: string;
-  teamName: string;
-  grade: string | null;
-  gradeScore: number | null;
-  completedAt: string | null;
-}
+type ModuleStatus = 'READY' | 'ACTIVE' | 'IN PROGRESS' | 'BETA' | 'LOCKED';
 
-const MODULES = [
+type ModuleCard = {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  color: string;
+  status: ModuleStatus;
+  featured?: boolean;
+};
+
+type StatItem = {
+  label: string;
+  value: string;
+};
+
+type RecentSession = {
+  id: string | number;
+  teamAbbreviation: string;
+  teamName: string;
+  grade: number;
+  dateLabel: string;
+};
+
+type LandingPageProps = {
+  activeDraft?: ActiveDraftSession | null;
+  onResumeDraft?: () => void;
+  onOpenModule?: (moduleId: string) => void;
+  recentSessions?: RecentSession[];
+  stats?: StatItem[];
+  style?: CSSProperties;
+};
+
+const DEFAULT_MODULES: ModuleCard[] = [
   {
-    key: 'draft',
+    id: 'mock-draft',
     title: 'Mock Draft Simulator',
-    subtitle: 'War Room',
-    desc: '480 real 2026 prospects · 32 franchises · AI war room · Hectic pre-draft trade engine',
-    tag: '2026 Class',
-    tagColor: S.blue,
-    accent: '#1e3460',
-    span: 2,
-    icon: '📋',
+    subtitle: 'Draft Engine',
+    description: 'Run full-board simulations with live war room control.',
+    color: T.blueBright,
+    status: 'ACTIVE',
+    featured: true,
   },
   {
-    key: 'recruiting',
-    title: 'Recruiting',
-    subtitle: 'College Football',
-    desc: '100 AI-powered recruits · Call & pitch each prospect · They respond in real time',
-    tag: 'NEW · AI',
-    tagColor: '#06b6d4',
-    accent: '#001e24',
-    span: 1,
-    icon: '📞',
-  },
-  {
-    key: 'career',
-    title: 'Road to Glory',
-    subtitle: 'Career Mode',
-    desc: 'Create a player · High school → NFL Draft → Pro career · Full progression',
-    tag: 'NEW',
-    tagColor: '#a855f7',
-    accent: '#160a24',
-    span: 1,
-    icon: '⭐',
-  },
-  {
-    key: 'game',
-    title: 'Arcade Football',
-    subtitle: 'Game Modes',
-    desc: 'Exhibition · Season · Franchise · Playoffs · Rebuild · Historical Eras · 32 NFL + 68 NCAA',
-    tag: 'EXPANDED',
-    tagColor: S.green,
-    accent: '#0e2018',
-    span: 1,
-    icon: '🏈',
-  },
-  {
-    key: 'combine',
-    title: 'NFL Combine',
-    subtitle: 'Mini-Games',
-    desc: '40-yard dash · Bench press · Wonderlic · Route running · QB accuracy',
-    tag: 'NEW · 5 EVENTS',
-    tagColor: '#84cc16',
-    accent: '#0f1800',
-    span: 1,
-    icon: '🏃',
-  },
-  {
-    key: 'analytics',
-    title: 'Analytics',
-    subtitle: 'Advanced Stats',
-    desc: 'EPA · Win probability · Draft analytics · Combine metrics · DVOA-style ratings',
-    tag: 'NEW',
-    tagColor: '#0ea5e9',
-    accent: '#001624',
-    span: 1,
-    icon: '📊',
-  },
-  {
-    key: 'scouting',
+    id: 'scouting-hub',
     title: 'Scouting Hub',
-    subtitle: 'Big Board',
-    desc: 'Claude-powered deep dives · 2025–2028 classes · Watchlist builder',
-    tag: 'Claude AI',
-    tagColor: '#7c3aed',
-    accent: '#1a1035',
-    span: 1,
-    icon: '🔭',
+    subtitle: 'Analytics',
+    description: 'Rank prospects and evaluate fit against team needs.',
+    color: T.green,
+    status: 'READY',
   },
   {
-    key: 'fantasy',
+    id: 'recruiting',
+    title: 'Recruiting',
+    subtitle: 'Career Mode',
+    description: 'Track pipelines and long-horizon roster strategy.',
+    color: T.gold,
+    status: 'BETA',
+  },
+  {
+    id: 'nfl-combine',
+    title: 'NFL Combine',
+    subtitle: 'Franchise Mode',
+    description: 'Review testing profiles, benchmarks, and comparables.',
+    color: T.amber,
+    status: 'READY',
+  },
+  {
+    id: 'fantasy-league',
     title: 'Fantasy League',
-    subtitle: 'Season-Long & DFS',
-    desc: 'Real NFL players · Snake draft · DFS contests · Live scoring',
-    tag: 'Live',
-    tagColor: S.gold,
-    accent: '#1e1a00',
-    span: 1,
-    icon: '🏆',
+    subtitle: 'Historical Eras',
+    description: 'Model alternate-era draft outcomes and roster builds.',
+    color: T.blue,
+    status: 'IN PROGRESS',
   },
 ];
 
-export function LandingPage() {
-  const navigate = useNavigate();
-  const { session, resetDraft } = useDraftStore();
-  const [recentDrafts, setRecentDrafts] = useState<RecentDraft[]>([]);
+const DEFAULT_STATS: StatItem[] = [
+  { label: 'PROSPECTS GRADED', value: '412' },
+  { label: 'SCOUTING REPORTS', value: '96' },
+  { label: 'SIMULATIONS RUN', value: '128' },
+  { label: 'AVG CLASS GRADE', value: 'B+' },
+  { label: 'TRADES MODELED', value: '37' },
+];
 
-  useEffect(() => {
-    fetch(API_BASE + '/api/drafts')
-      .then(r => r.json())
-      .then((data: RecentDraft[]) => setRecentDrafts(data.slice(0, 5)))
-      .catch(() => {});
-  }, []);
+function toRgba(hex: string, alpha: number): string {
+  const raw = hex.replace('#', '').trim();
+  const normalized =
+    raw.length === 3
+      ? raw
+          .split('')
+          .map((part) => `${part}${part}`)
+          .join('')
+      : raw;
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
-  const handleNav = (key: string) => {
-    if (key === 'draft') {
-      if (session?.status === 'drafting') navigate('/draft/board');
-      else { resetDraft(); navigate('/draft/select'); }
-    } else if (key === 'scouting') navigate('/scouting');
-    else if (key === 'fantasy') navigate('/fantasy');
-    else if (key === 'game') navigate('/game');
-    else if (key === 'recruiting') navigate('/recruiting');
-    else if (key === 'career') navigate('/career');
-    else if (key === 'combine') navigate('/combine');
-    else if (key === 'analytics') navigate('/analytics');
-  };
+function statusBadgeStyle(status: ModuleStatus): { bg: string; border: string; text: string } {
+  switch (status) {
+    case 'ACTIVE':
+      return { bg: T.greenSub, border: toRgba(T.green, 0.4), text: T.green };
+    case 'READY':
+      return { bg: T.blueSub, border: toRgba(T.blueBright, 0.45), text: T.blueBright };
+    case 'IN PROGRESS':
+      return { bg: toRgba(T.amber, 0.12), border: toRgba(T.amber, 0.4), text: T.amber };
+    case 'BETA':
+      return { bg: toRgba(T.gold, 0.12), border: toRgba(T.gold, 0.4), text: T.goldBright };
+    case 'LOCKED':
+    default:
+      return { bg: T.panel, border: T.border, text: T.txtMuted };
+  }
+}
+
+export default function LandingPage({
+  activeDraft = null,
+  onResumeDraft,
+  onOpenModule,
+  recentSessions = [],
+  stats = DEFAULT_STATS,
+  style,
+}: LandingPageProps) {
+  const modules = useMemo(() => DEFAULT_MODULES, []);
 
   return (
-    <div style={{ minHeight: '100vh', background: S.bg, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        background: T.bg,
+        color: T.txt,
+        fontFamily: T.fontBase,
+        ...style,
+      }}
+    >
+      <style>
+        {`
+          @keyframes livePulse {
+            0% { opacity: 0.45; transform: scale(0.92); }
+            50% { opacity: 1; transform: scale(1.06); }
+            100% { opacity: 0.45; transform: scale(0.92); }
+          }
 
-      {/* ── TOP NAV ────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '0 28px', height: 52, background: S.surface, borderBottom: `1px solid ${S.border}` }}>
+          .landing-module-card {
+            border: 1px solid ${T.border};
+            border-radius: 11px;
+            background: ${T.surface};
+            overflow: hidden;
+            cursor: pointer;
+            transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+          }
+
+          .landing-module-card:hover {
+            border-color: ${T.borderHi};
+            background: ${T.elevated};
+            transform: translateY(-1px);
+          }
+        `}
+      </style>
+
+      <header
+        style={{
+          height: 56,
+          borderBottom: `1px solid ${T.border}`,
+          background: T.surface,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 18px',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 18, fontWeight: 800, color: S.txt, letterSpacing: '-0.03em' }}>
-            Gridiron<span style={{ color: S.gold }}>IQ</span>
-          </span>
-          <span style={{ width: 1, height: 16, background: S.border }} />
-          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: S.txtMuted }}>
+          <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-0.01em', color: T.txt }}>GridironIQ</div>
+          <div style={{ color: T.borderHi }}>|</div>
+          <div style={{ fontSize: 10, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase' }}>
             Front Office Platform
-          </span>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 4, background: S.greenSub, border: `1px solid rgba(30,140,78,0.25)` }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: S.green, animation: 'pulse 2s infinite' }} />
-            <span style={{ fontSize: 10, fontWeight: 600, color: S.green, letterSpacing: '0.08em' }}>2026 NFL DRAFT LIVE</span>
           </div>
-          {session?.status === 'drafting' && (
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            style={{
+              borderRadius: 999,
+              border: `1px solid ${toRgba(T.green, 0.45)}`,
+              background: T.greenSub,
+              padding: '5px 10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+            }}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: T.green,
+                animation: 'livePulse 1.05s ease-in-out infinite',
+              }}
+            />
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', color: T.green, whiteSpace: 'nowrap' }}>2026 NFL DRAFT LIVE</span>
+          </div>
+          {activeDraft && (
             <button
-              onClick={() => navigate('/draft/board')}
-              style={{ fontSize: 11, padding: '4px 12px', borderRadius: 4, background: S.blueSub, border: `1px solid rgba(59,125,216,0.3)`, color: S.blue, cursor: 'pointer', fontWeight: 600 }}
+              type="button"
+              onClick={onResumeDraft}
+              style={{
+                border: `1px solid ${T.borderFoc}`,
+                background: T.blueSub,
+                color: T.blueBright,
+                borderRadius: 9,
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '7px 10px',
+                cursor: 'pointer',
+              }}
             >
               Resume Draft →
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* ── HERO ───────────────────────────────────────────────────────────── */}
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '48px 28px 0' }}>
-
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-          <div style={{ marginBottom: 6, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: S.txtMuted }}>
-            NFL · NCAA · AI-Powered Scouting
-          </div>
-          <h1 style={{ fontSize: 44, fontWeight: 800, color: S.txt, letterSpacing: '-0.04em', lineHeight: 1.05, margin: 0 }}>
-            Your Front Office.<br />
-            <span style={{ color: S.gold }}>Your Football World.</span>
-          </h1>
-          <p style={{ fontSize: 14, color: S.txtSub, marginTop: 12, maxWidth: 520, lineHeight: 1.6 }}>
-            Draft simulator · AI recruiting with real conversations · Career mode · Franchise · Season · Combine · Analytics · Historical eras. Everything Madden won't build.
-          </p>
-        </motion.div>
-
-        {/* ── MODULE CARDS ──────────────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.4 }}
-          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 32 }}
-        >
-          {MODULES.map(mod => (
-            <motion.button
-              key={mod.key}
-              whileHover={{ scale: 1.01, y: -2 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={() => handleNav(mod.key)}
+      <main
+        style={{
+          maxWidth: 1100,
+          margin: '0 auto',
+          padding: '32px 24px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 18,
+        }}
+      >
+        {activeDraft && (
+          <section
+            style={{
+              minHeight: 120,
+              borderRadius: 14,
+              border: `1px solid ${toRgba(activeDraft.teamPrimaryColor, 0.4)}`,
+              background: `linear-gradient(120deg, ${toRgba(activeDraft.teamPrimaryColor, 0.08)} 0%, ${T.surface} 48%, ${T.surface} 100%)`,
+              padding: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              <img
+                src={teamLogoUrl(activeDraft.teamAbbreviation)}
+                alt={`${activeDraft.teamName} logo`}
+                style={{ width: 64, height: 64, objectFit: 'contain' }}
+              />
+              <div>
+                <div style={{ fontSize: 10, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                  Draft in Progress
+                </div>
+                <div style={{ marginTop: 5, fontSize: 20, color: T.txt, fontWeight: 800 }}>{activeDraft.teamName}</div>
+                <div style={{ marginTop: 4, fontSize: 12, color: T.txtSub }}>
+                  Pick #{activeDraft.currentOverallPick} · Rd {activeDraft.currentRound} · {activeDraft.pickInRound} of 32
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onResumeDraft}
               style={{
-                gridColumn: mod.span === 2 ? '1 / -1' : 'auto',
-                padding: mod.span === 2 ? '22px 24px' : '18px 20px',
+                border: `1px solid ${toRgba(activeDraft.teamPrimaryColor, 0.65)}`,
+                background: `linear-gradient(135deg, ${toRgba(activeDraft.teamPrimaryColor, 0.95)} 0%, ${toRgba(activeDraft.teamPrimaryColor, 0.75)} 100%)`,
+                color: T.txtInvert,
                 borderRadius: 10,
-                background: S.surface,
-                border: `1px solid ${S.border}`,
+                height: 44,
+                minWidth: 210,
+                padding: '0 14px',
+                fontSize: 12,
+                fontWeight: 800,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
                 cursor: 'pointer',
-                textAlign: 'left',
-                position: 'relative',
-                overflow: 'hidden',
-                display: 'block',
-                transition: 'all 0.12s',
               }}
             >
-              {/* Accent glow */}
-              <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: mod.accent, filter: 'blur(40px)', opacity: 0.6, pointerEvents: 'none' }} />
+              Resume War Room →
+            </button>
+          </section>
+        )}
 
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: mod.span === 2 ? 22 : 18 }}>{mod.icon}</span>
-                    <div>
-                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: S.txtMuted }}>{mod.subtitle}</div>
-                      <div style={{ fontSize: mod.span === 2 ? 18 : 15, fontWeight: 700, color: S.txt, lineHeight: 1.1 }}>{mod.title}</div>
+        <section>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {modules.map((module) => {
+              const badge = statusBadgeStyle(module.status);
+              const height = module.featured ? 112 : 72;
+              const gridColumn = module.featured ? '1 / -1' : undefined;
+              return (
+                <button
+                  key={module.id}
+                  type="button"
+                  className="landing-module-card"
+                  onClick={() => onOpenModule?.(module.id)}
+                  style={{
+                    height,
+                    gridColumn,
+                    padding: 0,
+                    textAlign: 'left',
+                  }}
+                >
+                  <div style={{ height: 3, background: module.color }} />
+                  <div style={{ height: `calc(100% - 3px)`, padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {module.title}
+                        </div>
+                        <div style={{ fontSize: 9, color: T.txtMuted, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 800 }}>
+                          {module.subtitle}
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 11, color: T.txtSub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {module.description}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span
+                        style={{
+                          borderRadius: 999,
+                          border: `1px solid ${badge.border}`,
+                          background: badge.bg,
+                          color: badge.text,
+                          fontSize: 8,
+                          fontWeight: 800,
+                          letterSpacing: '0.06em',
+                          padding: '4px 7px',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {module.status}
+                      </span>
+                      <span style={{ fontSize: 16, color: T.txtSub, lineHeight: 1 }}>→</span>
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, color: S.txtSub, lineHeight: 1.5, maxWidth: mod.span === 2 ? 500 : 220 }}>{mod.desc}</div>
-                  {mod.key === 'draft' && session?.status === 'drafting' && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 10, padding: '4px 10px', borderRadius: 4, background: S.goldSub, border: `1px solid rgba(196,154,26,0.3)` }}>
-                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: S.gold, animation: 'pulse 1.5s infinite' }} />
-                      <span style={{ fontSize: 10, fontWeight: 600, color: S.gold }}>Draft in progress — resume</span>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 4, background: `${mod.tagColor}18`, border: `1px solid ${mod.tagColor}44`, color: mod.tagColor, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
-                    {mod.tag}
-                  </span>
-                  <span style={{ fontSize: 18, color: S.txtMuted }}>→</span>
-                </div>
-              </div>
-            </motion.button>
-          ))}
-        </motion.div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
-        {/* ── STATS ROW ─────────────────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginTop: 10 }}
+        <section
+          style={{
+            border: `1px solid ${T.border}`,
+            borderRadius: 12,
+            background: T.surface,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+          }}
         >
-          {[
-            { label: 'Prospects', value: '759', sub: '2026 & 2027 classes' },
-            { label: 'AI Recruits', value: '100', sub: 'Real conversations' },
-            { label: 'NFL Teams', value: '32', sub: 'All franchises' },
-            { label: 'Draft Rounds', value: '7', sub: 'Full simulation' },
-            { label: 'AI Engine', value: 'Claude', sub: 'War room advisor' },
-          ].map(stat => (
-            <div key={stat.label} style={{ padding: '12px 14px', borderRadius: 8, background: S.elevated, border: `1px solid ${S.border}` }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: S.txt, letterSpacing: '-0.02em' }}>{stat.value}</div>
-              <div style={{ fontSize: 10, fontWeight: 600, color: S.txtSub, marginTop: 2 }}>{stat.label}</div>
-              <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 1 }}>{stat.sub}</div>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* ── COMING SOON ───────────────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.35 }}
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}
-        >
-          {[
-            { label: 'Live Scores', desc: 'Real-time tracking', icon: '📊' },
-            { label: 'News Hub', desc: 'NFL analysis & rumors', icon: '📰' },
-            { label: 'Trade Analyzer', desc: 'Fantasy trade grades', icon: '📈' },
-          ].map(item => (
-            <div key={item.label} style={{ padding: '12px 14px', borderRadius: 8, background: S.surface, border: `1px solid ${S.border}`, opacity: 0.5, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 16 }}>{item.icon}</span>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: S.txt }}>{item.label}</div>
-                <div style={{ fontSize: 9, color: S.txtMuted }}>{item.desc} · Coming Soon</div>
+          {stats.slice(0, 5).map((item, index) => (
+            <div
+              key={item.label}
+              style={{
+                padding: '12px 10px',
+                borderLeft: index === 0 ? 'none' : `1px solid ${T.border}`,
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: 22, fontWeight: 800, color: T.txt, lineHeight: 1.1 }}>{item.value}</div>
+              <div style={{ marginTop: 6, fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                {item.label}
               </div>
             </div>
           ))}
-        </motion.div>
+        </section>
 
-        {/* ── RECENT DRAFTS ─────────────────────────────────────────────── */}
-        {recentDrafts.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            style={{ marginTop: 24, marginBottom: 32 }}
+        {recentSessions.length > 0 && (
+          <section
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 12,
+              background: T.surface,
+              overflow: 'hidden',
+            }}
           >
-            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: S.txtMuted, marginBottom: 8 }}>
+            <div
+              style={{
+                fontSize: 9,
+                color: T.txtMuted,
+                fontWeight: 800,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                padding: '10px 12px',
+                borderBottom: `1px solid ${T.border}`,
+              }}
+            >
               Recent Sessions
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {recentDrafts.map(draft => (
-                <div key={draft.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', borderRadius: 6, background: S.elevated, border: `1px solid ${S.border}` }}>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: S.txtSub, flex: 1 }}>{draft.teamName}</span>
-                  {draft.grade && (
-                    <span style={{ fontSize: 13, fontWeight: 700, color: S.blue }}>{draft.grade}</span>
-                  )}
-                  {draft.completedAt && (
-                    <span style={{ fontSize: 9, color: S.txtMuted }}>{new Date(draft.completedAt).toLocaleDateString()}</span>
-                  )}
+
+            <div>
+              {recentSessions.slice(0, 5).map((session, idx) => (
+                <div
+                  key={session.id}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '28px 1fr 44px 100px',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '9px 12px',
+                    borderTop: idx === 0 ? 'none' : `1px solid ${T.border}`,
+                  }}
+                >
+                  <img
+                    src={teamLogoUrl(session.teamAbbreviation)}
+                    alt={`${session.teamName} logo`}
+                    style={{ width: 22, height: 22, objectFit: 'contain' }}
+                  />
+                  <div style={{ fontSize: 12, color: T.txt, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {session.teamName}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: gradeColor(session.grade),
+                    }}
+                  >
+                    {gradeLetter(session.grade)}
+                  </div>
+                  <div style={{ fontSize: 10, color: T.txtSub, textAlign: 'right' }}>{session.dateLabel}</div>
                 </div>
               ))}
             </div>
-          </motion.div>
+          </section>
         )}
-
-      </div>
+      </main>
     </div>
   );
 }
+
+export { LandingPage };

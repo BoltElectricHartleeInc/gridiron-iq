@@ -1,170 +1,446 @@
-import { useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { NFL_TEAMS } from '../../data/teams';
-import { getPickIndicator } from '../../store/draftStore';
-import type { DraftPick } from '../../types/draft';
+import type { CSSProperties } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { POS, T, gradeColor, gradeLetter, teamLogoUrl } from '../../styles/tokens';
 
-// ─── Design tokens ─────────────────────────────────────────────────────────────
-const S = {
-  bg:       '#0b0f18',
-  surface:  '#0f1623',
-  elevated: '#141d2e',
-  border:   '#1c2d40',
-  txt:      '#cdd8e8',
-  txtSub:   '#6b82a0',
-  txtMuted: '#334560',
-  blue:     '#3b7dd8',
-  gold:     '#c49a1a',
-  green:    '#1e8c4e',
-  red:      '#b53838',
+type TeamRef = {
+  abbreviation: string;
+  city?: string;
+  name?: string;
+  primaryColor?: string;
 };
 
-// ─── Position color map — exported for use in DraftBoardPage ────────────────
-export const POSITION_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  QB:   { bg: 'rgba(37,99,235,0.18)',   border: 'rgba(37,99,235,0.45)',   text: '#6699e8' },
-  RB:   { bg: 'rgba(22,163,74,0.18)',   border: 'rgba(22,163,74,0.45)',   text: '#55b87a' },
-  WR:   { bg: 'rgba(180,100,0,0.18)',   border: 'rgba(180,100,0,0.45)',   text: '#c07820' },
-  TE:   { bg: 'rgba(100,30,180,0.18)',  border: 'rgba(100,30,180,0.45)',  text: '#9966cc' },
-  OT:   { bg: 'rgba(60,80,100,0.18)',   border: 'rgba(60,80,100,0.45)',   text: '#7a95aa' },
-  OG:   { bg: 'rgba(50,70,90,0.18)',    border: 'rgba(50,70,90,0.45)',    text: '#6a8898' },
-  C:    { bg: 'rgba(40,60,80,0.18)',    border: 'rgba(40,60,80,0.45)',    text: '#5a7888' },
-  EDGE: { bg: 'rgba(180,35,35,0.18)',   border: 'rgba(180,35,35,0.45)',   text: '#cc5555' },
-  DE:   { bg: 'rgba(180,35,35,0.18)',   border: 'rgba(180,35,35,0.45)',   text: '#cc5555' },
-  DT:   { bg: 'rgba(180,70,20,0.18)',   border: 'rgba(180,70,20,0.45)',   text: '#c06030' },
-  LB:   { bg: 'rgba(150,110,0,0.18)',   border: 'rgba(150,110,0,0.45)',   text: '#b88818' },
-  OLB:  { bg: 'rgba(150,110,0,0.18)',   border: 'rgba(150,110,0,0.45)',   text: '#b88818' },
-  CB:   { bg: 'rgba(10,120,110,0.18)',  border: 'rgba(10,120,110,0.45)',  text: '#28a898' },
-  S:    { bg: 'rgba(5,110,145,0.18)',   border: 'rgba(5,110,145,0.45)',   text: '#2090b8' },
-  K:    { bg: 'rgba(60,70,85,0.18)',    border: 'rgba(60,70,85,0.4)',     text: '#7080a0' },
-  P:    { bg: 'rgba(60,70,85,0.18)',    border: 'rgba(60,70,85,0.4)',     text: '#7080a0' },
+type DraftPlayer = {
+  id?: string | number;
+  fullName?: string;
+  name?: string;
+  position: string;
+  grade: number;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function gradeColor(g: number) {
-  if (g >= 90) return S.gold;
-  if (g >= 80) return S.blue;
-  if (g >= 70) return S.green;
-  return S.txtMuted;
-}
+type PickOutcome = 'STEAL' | 'REACH' | 'VALUE';
 
-function IndicatorDot({ pick }: { pick: DraftPick }) {
-  const ind = getPickIndicator(pick);
-  if (!ind) return null;
-  const colors = { steal: S.green, reach: S.red, value: S.blue };
-  return (
-    <div style={{ position: 'absolute', top: 3, right: 3, width: 5, height: 5, borderRadius: '50%', background: colors[ind] }} title={ind.toUpperCase()} />
-  );
-}
+type DraftPick = {
+  round: number;
+  pickInRound: number;
+  overall: number;
+  team: TeamRef;
+  player?: DraftPlayer | null;
+  isUserTeam?: boolean;
+  outcome?: PickOutcome | null;
+};
 
-interface Props {
+type DraftBoardProps = {
   picks: DraftPick[];
-  currentPickIndex: number;
-  userTeamId: string;
+  currentOverallPick: number;
+  rounds?: number;
+  picksPerRound?: number;
+  className?: string;
+  style?: CSSProperties;
+};
+
+export const POSITION_COLORS = POS;
+
+const STEAL_REACH_VALUE_COLORS: Record<PickOutcome, string> = {
+  STEAL: T.green,
+  REACH: T.red,
+  VALUE: T.blueBright,
+};
+
+function safeLastName(player?: DraftPlayer | null): string {
+  const candidate = (player?.fullName ?? player?.name ?? '').trim();
+  if (!candidate) return '—';
+  const parts = candidate.split(/\s+/);
+  return parts[parts.length - 1]?.toUpperCase() ?? '—';
 }
 
-export function DraftBoard({ picks, currentPickIndex, userTeamId }: Props) {
-  const currentRef = useRef<HTMLDivElement>(null);
+function inferOutcomeFromGrade(grade: number): PickOutcome {
+  if (grade >= 88) return 'STEAL';
+  if (grade <= 72) return 'REACH';
+  return 'VALUE';
+}
+
+function normalizePick(pick: DraftPick): DraftPick {
+  if (pick.outcome) return pick;
+  if (!pick.player) return pick;
+  return { ...pick, outcome: inferOutcomeFromGrade(pick.player.grade) };
+}
+
+function groupPicksByRound(picks: DraftPick[], rounds: number, picksPerRound: number): DraftPick[][] {
+  const map = new Map<number, DraftPick[]>();
+  for (let round = 1; round <= rounds; round += 1) map.set(round, []);
+  picks.forEach((pick) => {
+    if (!map.has(pick.round)) map.set(pick.round, []);
+    map.get(pick.round)!.push(normalizePick(pick));
+  });
+  const grouped: DraftPick[][] = [];
+  for (let round = 1; round <= rounds; round += 1) {
+    const roundPicks = (map.get(round) ?? []).slice().sort((a, b) => a.pickInRound - b.pickInRound);
+    for (let i = 1; i <= picksPerRound; i += 1) {
+      const existing = roundPicks.find((pick) => pick.pickInRound === i);
+      if (!existing) {
+        roundPicks.push({
+          round,
+          pickInRound: i,
+          overall: (round - 1) * picksPerRound + i,
+          team: { abbreviation: 'TBD' },
+          player: null,
+          isUserTeam: false,
+          outcome: null,
+        });
+      }
+    }
+    grouped.push(roundPicks.sort((a, b) => a.pickInRound - b.pickInRound));
+  }
+  return grouped;
+}
+
+function outcomeLabel(outcome?: PickOutcome | null): PickOutcome | null {
+  if (!outcome) return null;
+  return outcome;
+}
+
+function positionStyle(position: string): { bg: string; border: string; text: string; pill: string } {
+  return POS[position] ?? { bg: T.blueSub, border: T.borderFoc, text: T.blueBright, pill: T.panel };
+}
+
+export default function DraftBoard({
+  picks,
+  currentOverallPick,
+  rounds = 7,
+  picksPerRound = 32,
+  className,
+  style,
+}: DraftBoardProps) {
+  const livePickRef = useRef<HTMLDivElement | null>(null);
+
+  const groupedPicks = useMemo(
+    () => groupPicksByRound(picks, rounds, picksPerRound),
+    [picks, rounds, picksPerRound],
+  );
 
   useEffect(() => {
-    currentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [currentPickIndex]);
-
-  const roundSet = new Set(picks.map(p => p.round));
-  const ROUNDS = Array.from(roundSet).sort((a, b) => a - b);
-  const picksByRound: Record<number, DraftPick[]> = {};
-  for (const round of ROUNDS) {
-    picksByRound[round] = picks.filter(p => p.round === round);
-  }
+    if (!livePickRef.current) return;
+    livePickRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+  }, [currentOverallPick, groupedPicks]);
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', background: S.bg }}>
-      {ROUNDS.map(round => (
-        <div key={round}>
-          {/* Round header */}
-          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: S.surface, borderBottom: `1px solid ${S.border}`, padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: S.txtMuted }}>Round {round}</span>
-            <div style={{ flex: 1, height: 1, background: S.border }} />
-            <span style={{ fontSize: 9, color: S.txtMuted, fontVariantNumeric: 'tabular-nums' }}>
-              {picksByRound[round]?.filter(p => p.prospect).length}/{picksByRound[round]?.length} picks
-            </span>
-          </div>
+    <div
+      className={className}
+      style={{
+        minHeight: 0,
+        overflow: 'auto',
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        borderRadius: 12,
+        padding: 10,
+        fontFamily: T.fontBase,
+        ...style,
+      }}
+    >
+      <style>
+        {`
+          @keyframes boardPulse {
+            0%   { opacity: 0.65; filter: drop-shadow(0 0 0 rgba(0,200,83,0)); }
+            50%  { opacity: 1; filter: drop-shadow(0 0 5px rgba(0,200,83,0.36)); }
+            100% { opacity: 0.65; filter: drop-shadow(0 0 0 rgba(0,200,83,0)); }
+          }
 
-          {/* Pick grid — 8 columns */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 1, padding: '2px 4px 8px', background: S.bg }}>
-            {picksByRound[round]?.map(pick => {
-              const team = NFL_TEAMS.find(t => t.id === pick.teamId);
-              const idx = picks.indexOf(pick);
-              const isCurrent = idx === currentPickIndex;
-              const isUser = pick.teamId === userTeamId;
-              const isDrafted = !!pick.prospect;
-              const pos = pick.prospect?.position;
-              const posColor = pos ? POSITION_COLORS[pos] : null;
+          .draft-board-round-header {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: linear-gradient(180deg, ${T.surface} 0%, ${T.surface} 86%, ${hexFade(T.surface, 0)} 100%);
+            padding: 8px 0 7px;
+            margin-bottom: 8px;
+          }
 
-              return (
-                <motion.div
-                  key={pick.overall}
-                  ref={isCurrent ? currentRef : null}
-                  layout
+          .draft-board-round-divider {
+            margin-top: 7px;
+            height: 1px;
+            background: ${T.border};
+            width: 100%;
+          }
+
+          .draft-board-grid {
+            display: grid;
+            grid-template-columns: repeat(8, minmax(0, 1fr));
+            gap: 2px;
+          }
+
+          .draft-pick-cell {
+            position: relative;
+            height: 88px;
+            border: 1px solid ${T.border};
+            background: ${T.panel};
+            border-radius: 6px;
+            padding: 4px 5px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            text-align: center;
+          }
+        `}
+      </style>
+
+      {groupedPicks.map((roundPicks, index) => {
+        const roundNumber = index + 1;
+        const completedCount = roundPicks.filter((pick) => pick.player).length;
+        return (
+          <section key={`round-${roundNumber}`} style={{ marginBottom: 10 }}>
+            <header className="draft-board-round-header">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div
                   style={{
-                    position: 'relative',
-                    minHeight: 64,
-                    borderRadius: 4,
-                    padding: '5px 4px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    background: isCurrent
-                      ? 'rgba(30,140,78,0.12)'
-                      : isUser && !isDrafted
-                        ? 'rgba(59,125,216,0.06)'
-                        : isDrafted
-                          ? S.elevated
-                          : S.surface,
-                    border: `1px solid ${isCurrent ? 'rgba(30,140,78,0.4)' : isUser && isDrafted ? 'rgba(59,125,216,0.2)' : isUser ? 'rgba(59,125,216,0.18)' : S.border}`,
-                    boxShadow: isCurrent ? '0 0 10px rgba(30,140,78,0.15)' : 'none',
-                    transition: 'all 0.15s',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: T.txtSub,
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
                   }}
                 >
-                  {isDrafted && <IndicatorDot pick={pick} />}
+                  ROUND {roundNumber}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: T.txtMuted,
+                    fontVariantNumeric: 'tabular-nums',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {completedCount}/{picksPerRound} picks
+                </div>
+              </div>
+              <div className="draft-board-round-divider" />
+            </header>
 
-                  {/* Pick number */}
-                  <div style={{ fontSize: 8, color: S.txtMuted, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{pick.overall}</div>
+            <div className="draft-board-grid">
+              {roundPicks.map((pick) => {
+                const isLive = pick.overall === currentOverallPick;
+                const isCompleted = Boolean(pick.player) && !isLive;
+                const isUserTeam = Boolean(pick.isUserTeam);
+                const pos = isCompleted ? positionStyle(pick.player!.position) : null;
+                const outcome = isCompleted ? outcomeLabel(pick.outcome) : null;
+                const outcomeColor = outcome ? STEAL_REACH_VALUE_COLORS[outcome] : null;
 
-                  {/* Team color bar */}
-                  <div style={{ width: 20, height: 3, borderRadius: 2, background: team?.primaryColor ?? S.border, margin: '3px 0', opacity: isDrafted || isCurrent ? 0.9 : 0.35 }} />
+                const ref = isLive ? livePickRef : undefined;
 
-                  {isDrafted ? (
-                    <>
-                      {/* Player last name */}
-                      <div style={{ fontSize: 9, fontWeight: 600, color: isUser ? '#8ab4e8' : S.txt, textAlign: 'center', lineHeight: 1.2, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {pick.prospect!.name.split(' ').slice(-1)[0]}
-                      </div>
-                      {/* Position badge */}
-                      {posColor && (
-                        <span style={{ fontSize: 7, fontWeight: 700, padding: '1px 3px', borderRadius: 2, background: posColor.bg, border: `1px solid ${posColor.border}`, color: posColor.text, marginTop: 2, letterSpacing: '0.03em' }}>
-                          {pos}
-                        </span>
-                      )}
-                      {/* Grade */}
-                      <div style={{ fontSize: 8, fontWeight: 700, color: gradeColor(pick.prospect!.grade), marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                        {pick.prospect!.grade % 1 === 0 ? pick.prospect!.grade : pick.prospect!.grade.toFixed(1)}
-                      </div>
-                    </>
-                  ) : isCurrent ? (
-                    <div style={{ fontSize: 8, fontWeight: 700, color: S.green, letterSpacing: '0.08em', animation: 'pulse 1.5s infinite', textAlign: 'center', lineHeight: 1.3 }}>
-                      {isUser ? 'YOUR\nPICK' : 'LIVE'}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 8, color: S.txtMuted }}>
-                      {team?.abbreviation?.slice(0, 3) ?? '—'}
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+                return (
+                  <div
+                    key={`pick-${pick.round}-${pick.pickInRound}-${pick.overall}`}
+                    ref={ref}
+                    className="draft-pick-cell"
+                    style={{
+                      border: isLive
+                        ? `1px solid rgba(0,200,83,0.6)`
+                        : isCompleted
+                          ? `1px solid ${isUserTeam ? hexFade(T.blueBright, 0.45) : T.borderHi}`
+                          : `1px solid ${isUserTeam ? T.blueGlow : T.border}`,
+                      background: isLive
+                        ? `linear-gradient(180deg, ${hexFade(T.green, 0.12)} 0%, ${T.panel} 100%)`
+                        : isCompleted
+                          ? T.elevated
+                          : isUserTeam
+                            ? `linear-gradient(180deg, ${hexFade(T.blueBright, 0.08)} 0%, ${T.panel} 100%)`
+                            : T.panel,
+                      boxShadow: isLive
+                        ? '0 0 16px rgba(0,200,83,0.2)'
+                        : isUserTeam && isCompleted
+                          ? `0 0 0 1px ${hexFade(T.blueBright, 0.18)}`
+                          : 'none',
+                    }}
+                  >
+                    {!isCompleted && !isLive && (
+                      <>
+                        <div
+                          style={{
+                            fontSize: 9,
+                            lineHeight: 1,
+                            color: T.txtMuted,
+                            fontVariantNumeric: 'tabular-nums',
+                            marginTop: 1,
+                          }}
+                        >
+                          #{pick.overall}
+                        </div>
+                        <img
+                          src={teamLogoUrl(pick.team.abbreviation)}
+                          alt={`${pick.team.abbreviation} logo`}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            objectFit: 'contain',
+                            opacity: 0.35,
+                          }}
+                        />
+                        <div style={{ fontSize: 9, color: T.txtMuted, marginBottom: 1 }}>{pick.team.abbreviation}</div>
+                      </>
+                    )}
+
+                    {isLive && (
+                      <>
+                        <div
+                          style={{
+                            fontSize: 9,
+                            lineHeight: 1,
+                            color: T.green,
+                            fontWeight: 700,
+                            letterSpacing: '0.08em',
+                            textTransform: 'uppercase',
+                            animation: 'boardPulse 1.15s ease-in-out infinite',
+                            marginTop: 1,
+                          }}
+                        >
+                          ON THE CLOCK
+                        </div>
+                        <img
+                          src={teamLogoUrl(pick.team.abbreviation)}
+                          alt={`${pick.team.abbreviation} logo`}
+                          style={{ width: 36, height: 36, objectFit: 'contain', opacity: 1 }}
+                        />
+                        <div style={{ fontSize: 9, color: T.txtSub }}>{pick.team.abbreviation}</div>
+                        {isUserTeam && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 3,
+                              left: 5,
+                              fontSize: 9,
+                              fontWeight: 700,
+                              color: T.blueBright,
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            YOUR PICK
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {isCompleted && (
+                      <>
+                        <div
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            fontSize: 8,
+                            lineHeight: 1,
+                            color: T.txtMuted,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          #{pick.overall}
+                        </div>
+
+                        <img
+                          src={teamLogoUrl(pick.team.abbreviation)}
+                          alt={`${pick.team.abbreviation} logo`}
+                          style={{ width: 28, height: 28, objectFit: 'contain', opacity: 1 }}
+                        />
+
+                        <div
+                          style={{
+                            width: '100%',
+                            fontSize: 10,
+                            lineHeight: 1.1,
+                            fontWeight: 700,
+                            color: T.txt,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {safeLastName(pick.player)}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: 8,
+                            lineHeight: 1,
+                            borderRadius: 999,
+                            padding: '2px 6px',
+                            color: pos!.text,
+                            border: `1px solid ${pos!.border}`,
+                            background: pos!.bg,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {pick.player!.position}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: 9,
+                            lineHeight: 1,
+                            color: gradeColor(pick.player!.grade),
+                            fontWeight: 800,
+                          }}
+                        >
+                          {gradeLetter(pick.player!.grade)}
+                        </div>
+
+                        {outcome && outcomeColor && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              right: 4,
+                              bottom: 3,
+                              minHeight: 14,
+                              padding: '0 3px',
+                              borderRadius: 4,
+                              background: hexFade(outcomeColor, 0.14),
+                              border: `1px solid ${hexFade(outcomeColor, 0.35)}`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              fontSize: 7,
+                              lineHeight: 1,
+                              color: outcomeColor,
+                              fontWeight: 800,
+                              letterSpacing: '0.04em',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {outcome}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
+}
+
+function hexFade(color: string, alpha: number): string {
+  if (color.startsWith('rgba') || color.startsWith('rgb')) {
+    const [r, g, b] = color
+      .replace(/[^\d,]/g, '')
+      .split(',')
+      .slice(0, 3)
+      .map((v) => Number.parseInt(v, 10));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  const raw = color.replace('#', '').trim();
+  const normalized =
+    raw.length === 3
+      ? raw
+          .split('')
+          .map((part) => `${part}${part}`)
+          .join('')
+      : raw;
+
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

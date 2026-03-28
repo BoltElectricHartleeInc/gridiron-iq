@@ -1,813 +1,918 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import type { CSSProperties, ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useDraftStore } from '../store/draftStore';
 import { NFL_TEAMS } from '../data/teams';
-import { ProspectCard } from '../components/draft/ProspectCard';
-import { DraftBoard, POSITION_COLORS } from '../components/draft/DraftBoard';
-import { TradeModal } from '../components/draft/TradeModal';
-import { PickClock } from '../components/draft/PickClock';
-import { ProspectCompare } from '../components/draft/ProspectCompare';
-import { IncomingTradeOffer } from '../components/draft/IncomingTradeOffer';
-import type { Prospect, DraftSession } from '../types/draft';
+import DraftBoard from '../components/draft/DraftBoard';
+import { POS, T, gradeColor, gradeLetter, teamLogoUrl } from '../styles/tokens';
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const S = {
-  bg:        '#0b0f18',
-  surface:   '#0f1623',
-  elevated:  '#141d2e',
-  border:    '#1c2d40',
-  borderHi:  '#253352',
-  txt:       '#cdd8e8',
-  txtSub:    '#6b82a0',
-  txtMuted:  '#334560',
-  blue:      '#3b7dd8',
-  blueSub:   'rgba(59,125,216,0.12)',
-  gold:      '#c49a1a',
-  goldSub:   'rgba(196,154,26,0.10)',
-  green:     '#1e8c4e',
-  greenSub:  'rgba(30,140,78,0.12)',
-  red:       '#b53838',
-  redSub:    'rgba(181,56,56,0.12)',
+type SimulationSpeed = 'FAST' | 'NORMAL' | 'SLOW';
+type ValueTag = 'STEAL' | 'REACH' | 'VALUE';
+
+type TeamInfo = {
+  abbreviation: string;
+  city?: string;
+  name: string;
+  needs: string[];
+  avatarUrl?: string;
 };
 
-// ─── Label component ──────────────────────────────────────────────────────────
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ fontSize: '9px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: S.txtMuted }}>
-      {children}
-    </div>
-  );
-}
-
-// ─── Section header ───────────────────────────────────────────────────────────
-function SectionHead({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: `1px solid ${S.border}`, background: S.elevated }}>
-      <Label>{children}</Label>
-      {right}
-    </div>
-  );
-}
-
-// ─── Grade badge ──────────────────────────────────────────────────────────────
-function GradeBadge({ grade, size = 'md' }: { grade: number; size?: 'sm' | 'md' }) {
-  const color = grade >= 90 ? '#c49a1a' : grade >= 80 ? '#3b7dd8' : grade >= 70 ? '#1e8c4e' : '#334560';
-  const bg    = grade >= 90 ? 'rgba(196,154,26,0.15)' : grade >= 80 ? 'rgba(59,125,216,0.15)' : grade >= 70 ? 'rgba(30,140,78,0.15)' : 'rgba(255,255,255,0.04)';
-  const w = size === 'sm' ? 28 : 34;
-  return (
-    <div style={{ width: w, height: w, borderRadius: 6, background: bg, border: `1px solid ${color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color, fontSize: size === 'sm' ? 10 : 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-      {grade % 1 === 0 ? grade : grade.toFixed(1)}
-    </div>
-  );
-}
-
-// ─── Position badge ───────────────────────────────────────────────────────────
-function PosBadge({ position }: { position: string }) {
-  const c = POSITION_COLORS[position] ?? POSITION_COLORS['K'];
-  return (
-    <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: c.bg, border: `1px solid ${c.border}`, color: c.text, flexShrink: 0, letterSpacing: '0.04em' }}>
-      {position}
-    </span>
-  );
-}
-
-// ─── Value indicator ──────────────────────────────────────────────────────────
-function ValueBadge({ prospect, pickNumber }: { prospect: Prospect; pickNumber: number }) {
-  // Compare player's actual grade to what's expected at this pick on the draft curve
-  const expectedGrade = Math.max(55, 99 - pickNumber * 0.145);
-  const delta = prospect.grade - expectedGrade;
-  if (delta >= 7)  return <span style={{ fontSize: '9px', fontWeight: 700, color: S.green, letterSpacing: '0.05em' }}>STEAL</span>;
-  if (delta <= -6) return <span style={{ fontSize: '9px', fontWeight: 700, color: S.red, letterSpacing: '0.05em' }}>REACH</span>;
-  return <span style={{ fontSize: '9px', fontWeight: 600, color: S.blue, letterSpacing: '0.05em' }}>VALUE</span>;
-}
-
-// Local fallback advisor — works without API
-const ADVISOR_POS_VALUE: Record<string, number> = {
-  QB: 100, EDGE: 90, OT: 85, CB: 82, WR: 80,
-  DT: 75, S: 70, LB: 68, TE: 65, OG: 60,
-  RB: 55, C: 50, K: 20, P: 20,
+type DraftPlayer = {
+  id?: string | number;
+  fullName?: string;
+  name?: string;
+  position: string;
+  grade: number;
 };
 
-function generateLocalAdvice(params: {
-  teamNeeds: string[];
-  availableProspects: Array<{ name: string; position: string; college: string; grade: number; round: number }>;
-  pickNumber: number;
+type DraftPick = {
   round: number;
-  needsWeight: number;
-}): string {
-  const { teamNeeds, availableProspects, pickNumber, round, needsWeight } = params;
-  if (availableProspects.length === 0) return 'PICK: No prospects available\nFIT: Board is empty.\nINTEL: Draft complete.\nCONCERN: None.';
+  pickInRound: number;
+  overall: number;
+  team: { abbreviation: string };
+  player?: DraftPlayer | null;
+  isUserTeam?: boolean;
+  outcome?: ValueTag | null;
+};
 
-  const nw = needsWeight / 100;
-  const scored = availableProspects.map(p => {
-    const bpa = p.grade;
-    const needIdx = teamNeeds.indexOf(p.position);
-    const needScore = needIdx === -1 ? 30 : Math.max(0, 100 - needIdx * 20);
-    const posScore = ADVISOR_POS_VALUE[p.position] ?? 50;
-    const score = bpa * (1 - nw) + needScore * nw + posScore * 0.08;
-    return { p, score };
-  }).sort((a, b) => b.score - a.score);
+type BigBoardProspect = {
+  id?: string | number;
+  rank: number;
+  fullName: string;
+  school: string;
+  position: string;
+  grade: number;
+  valueTag?: ValueTag;
+};
 
-  const top = scored[0].p;
-  const second = scored[1]?.p;
+type AdvisorIntel = {
+  pick: string;
+  fit: string;
+  intel: string;
+  concern?: string;
+};
 
-  const needIdx = teamNeeds.indexOf(top.position);
-  const fitReason = needIdx === 0
-    ? `addresses your #1 need at ${top.position}`
-    : needIdx > 0 && needIdx <= 2
-      ? `fills a roster need at ${top.position}`
-      : `best player available at this pick`;
+type ProjectedPick = {
+  round: number;
+  overall: number;
+  positionProjection: string;
+};
 
-  const roundDiff = top.round - round;
-  const concern = roundDiff <= -2
-    ? `Projected ${top.round > 0 ? 'R' + top.round : 'undrafted'} — significant reach. Needs justify it.`
-    : roundDiff >= 2
-      ? `Projected R${top.round} player still available — rare value.`
-      : 'None — solid value pick at this slot.';
+type DraftBoardPageProps = {
+  userTeam: TeamInfo;
+  teams: TeamInfo[];
+  picks: DraftPick[];
+  prospects: BigBoardProspect[];
+  currentOverallPick: number;
+  speed?: SimulationSpeed;
+  paused?: boolean;
+  simulationNumber?: number;
+  pickClock?: ReactNode;
+  advisorLoading?: boolean;
+  advisorIntel?: AdvisorIntel | null;
+  projectedUserPicks?: ProjectedPick[];
+  onSpeedChange?: (speed: SimulationSpeed) => void;
+  onPauseToggle?: () => void;
+  onSkipToMyPick?: () => void;
+  onOpenProspectCard?: (prospect: BigBoardProspect) => void;
+  renderProspectCard?: (prospect: BigBoardProspect, close: () => void) => ReactNode;
+  tradeModal?: ReactNode;
+  incomingTradeOffer?: ReactNode;
+  compareModal?: ReactNode;
+  style?: CSSProperties;
+};
 
-  const intel = second
-    ? `${second.name} (${second.position}) is the next best option if you prefer the position.`
-    : 'Thin board — take your top-rated player.';
+const POSITION_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'OT', 'OG', 'C', 'EDGE', 'DT', 'LB', 'CB', 'S'] as const;
 
-  return `PICK: ${top.name} (${top.position}, ${top.college})\nFIT: Grade ${top.grade} ${top.position} — ${fitReason} at pick #${pickNumber}.\nINTEL: ${intel}\nCONCERN: ${concern}`;
+const VALUE_COLORS: Record<ValueTag, string> = {
+  STEAL: T.green,
+  REACH: T.red,
+  VALUE: T.blueBright,
+};
+
+const SPEEDS: SimulationSpeed[] = ['FAST', 'NORMAL', 'SLOW'];
+
+function keyFromName(value: string): string {
+  return value.trim().toUpperCase();
 }
 
-// ─── Board analytics ─────────────────────────────────────────────────────────
-function BoardAnalytics({ session }: { session: DraftSession }) {
-  const completedPicks = session.picks.slice(0, session.currentPickIndex).filter((p) => p.prospect);
-  const posMap: Record<string, number> = {};
-  for (const pick of completedPicks) {
-    if (pick.prospect) posMap[pick.prospect.position] = (posMap[pick.prospect.position] ?? 0) + 1;
-  }
-  const topPositions = Object.entries(posMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  if (topPositions.length === 0) return null;
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 12px', borderBottom: `1px solid ${S.border}` }}>
-      {topPositions.map(([pos, cnt]) => (
-        <div key={pos} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          <PosBadge position={pos} />
-          <span style={{ fontSize: 10, color: S.txtSub, fontVariantNumeric: 'tabular-nums' }}>{cnt}</span>
-        </div>
-      ))}
-      <span style={{ fontSize: 9, color: S.txtMuted, alignSelf: 'center' }}>taken</span>
-    </div>
-  );
+function lastName(value: string): string {
+  const parts = value.trim().split(/\s+/);
+  return (parts[parts.length - 1] ?? value).toUpperCase();
 }
 
-export function DraftBoardPage() {
-  const navigate = useNavigate();
-  const {
-    session, availableProspects,
-    makePick, simulateNextPick, simulateToUserPick,
-    resetDraft, simSpeed, setDraftSettings, aiAdvisorEnabled, needsWeight, positionWeight, tradeFrequency, draftCraziness,
-    commentary, commentaryType, setCommentary,
-    compareList, addToCompare, clearCompare,
-    incomingTradeOffer, generateAITradeOffer, respondToAITradeOffer,
-  } = useDraftStore();
+function projectedRoundFromOverall(overall: number): number {
+  return Math.max(1, Math.ceil(overall / 32));
+}
 
-  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
-  const [showTrade, setShowTrade] = useState(false);
-  const [posFilter, setPosFilter] = useState<string>('ALL');
-  const [autoSim, setAutoSim] = useState(true);
-  const [lastPickAnim, setLastPickAnim] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
+function projectedPickInRound(overall: number): number {
+  return ((overall - 1) % 32) + 1;
+}
 
-  // AI Advisor
-  const [advisorText, setAdvisorText] = useState<string>('');
-  const [advisorLoading, setAdvisorLoading] = useState(false);
-  const advisorFetchedForPick = useRef<number | null>(null);
-  const advisorAbortRef = useRef<AbortController | null>(null);
+function rowNeedTint(position: string): string {
+  const palette = POS[position];
+  return palette?.bg ?? T.blueSub;
+}
 
-  // Commentary auto-hide
-  useEffect(() => {
-    if (commentary) {
-      const timer = setTimeout(() => setCommentary(null, null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [commentary, setCommentary]);
+function initials(team: TeamInfo): string {
+  return team.abbreviation.slice(0, 2).toUpperCase();
+}
 
-  useEffect(() => { if (!session) navigate('/draft/select'); }, [session, navigate]);
-  useEffect(() => { if (session?.status === 'complete') navigate('/draft/results'); }, [session?.status, navigate]);
+function resolveValueTag(prospect: BigBoardProspect): ValueTag {
+  if (prospect.valueTag) return prospect.valueTag;
+  if (prospect.grade >= 88) return 'STEAL';
+  if (prospect.grade <= 72) return 'REACH';
+  return 'VALUE';
+}
 
-  // Auto sim
-  useEffect(() => {
-    if (!autoSim || !session || session.status !== 'drafting') return;
-    const currentPick = session.picks[session.currentPickIndex];
-    if (!currentPick || currentPick.isUserPick) return; // pause at user turn, don't stop autoSim
-    const timer = setTimeout(() => simulateNextPick(), simSpeed);
-    return () => clearTimeout(timer);
-  }, [autoSim, session, simulateNextPick, simSpeed]);
-
-  // AI Advisor fetch
-  useEffect(() => {
-    if (!session || !aiAdvisorEnabled) return;
-    const currentPick = session.picks[session.currentPickIndex];
-    if (!currentPick?.isUserPick) {
-      setAdvisorText('');
-      advisorFetchedForPick.current = null;
-      return;
-    }
-    if (advisorFetchedForPick.current === currentPick.overall) return;
-    advisorFetchedForPick.current = currentPick.overall;
-
-    const team = NFL_TEAMS.find(t => t.id === currentPick.teamId);
-    if (!team) return;
-
-    const top12 = [...availableProspects]
-      .sort((a, b) => b.grade - a.grade)
-      .slice(0, 12)
-      .map(p => ({ id: p.id, name: p.name, position: p.position, college: p.college, grade: p.grade, round: p.round, traits: p.traits }));
-
-    // Build completed picks context
-    const completedPicks = session.picks
-      .slice(0, session.currentPickIndex)
-      .filter(p => p.prospect)
-      .map(p => ({ teamId: p.teamId, position: p.prospect!.position, name: p.prospect!.name, grade: p.prospect!.grade, round: p.round, overall: p.overall }));
-
-    // User's own picks
-    const userPicksMade = session.picks
-      .filter(p => p.teamId === session.userTeamId && p.prospect)
-      .map(p => ({ position: p.prospect!.position, name: p.prospect!.name, grade: p.prospect!.grade }));
-
-    setAdvisorLoading(true);
-    setAdvisorText('');
-    generateAITradeOffer();
-
-    advisorAbortRef.current?.abort();
-    const ctrl = new AbortController();
-    advisorAbortRef.current = ctrl;
-
-    fetch('/api/draft/advice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        teamId: team.id,
-        teamName: `${team.city} ${team.name}`,
-        teamNeeds: team.needs,
-        teamDraftStyle: team.draftStyle,
-        availableProspects: top12,
-        pickNumber: currentPick.overall,
-        round: currentPick.round,
-        pickInRound: currentPick.pickInRound,
-        needsWeight,
-        completedPicks,
-        userPicksMade,
-        totalProspectsRemaining: availableProspects.length,
-      }),
-      signal: ctrl.signal,
-    })
-      .then(async res => {
-        if (!res.ok || !res.body) {
-          const team = NFL_TEAMS.find(t => t.id === session?.userTeamId);
-          const localAdvice = generateLocalAdvice({
-            teamNeeds: team?.needs ?? [],
-            availableProspects: availableProspects.slice(0, 12).map(p => ({
-              name: p.name, position: p.position, college: p.college,
-              grade: p.grade, round: p.round,
-            })),
-            pickNumber: session?.picks[session?.currentPickIndex ?? 0]?.overall ?? 1,
-            round: session?.picks[session?.currentPickIndex ?? 0]?.round ?? 1,
-            needsWeight,
-          });
-          setAdvisorText(localAdvice);
-          setAdvisorLoading(false);
-          return;
-        }
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let full = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          full += decoder.decode(value, { stream: true });
-          setAdvisorText(full);
-        }
-        setAdvisorLoading(false);
-      })
-      .catch(err => {
-        if (err?.name === 'AbortError') return;
-        // Fall back to local advisor
-        const team = NFL_TEAMS.find(t => t.id === session?.userTeamId);
-        const localAdvice = generateLocalAdvice({
-          teamNeeds: team?.needs ?? [],
-          availableProspects: availableProspects.slice(0, 12).map(p => ({
-            name: p.name, position: p.position, college: p.college,
-            grade: p.grade, round: p.round,
-          })),
-          pickNumber: session?.picks[session?.currentPickIndex ?? 0]?.overall ?? 1,
-          round: session?.picks[session?.currentPickIndex ?? 0]?.round ?? 1,
-          needsWeight,
-        });
-        setAdvisorText(localAdvice);
-        setAdvisorLoading(false);
-      });
-  }, [session, session?.currentPickIndex, aiAdvisorEnabled, availableProspects, needsWeight, generateAITradeOffer]);
-
-  const handleMakePick = useCallback((prospectId: string) => {
-    makePick(prospectId);
-    setSelectedProspect(null);
-    setLastPickAnim(prospectId);
-    setAdvisorText('');
-    advisorFetchedForPick.current = null;
-    setTimeout(() => setLastPickAnim(null), 1500);
-  }, [makePick]);
-
-  if (!session) return null;
-
-  const currentPick = session.picks[session.currentPickIndex];
-  const currentTeam = currentPick ? NFL_TEAMS.find(t => t.id === currentPick.teamId) : null;
-  const isUserTurn = currentPick?.isUserPick ?? false;
-  const userTeam = NFL_TEAMS.find(t => t.id === session.userTeamId);
-
-  const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'OT', 'OG', 'C', 'DE', 'DT', 'LB', 'OLB', 'CB', 'S'];
-  const filteredProspects = availableProspects
-    .filter(p => posFilter === 'ALL' || p.position === posFilter)
-    .filter(p => !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.college.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort((a, b) => b.grade - a.grade);
-
-  const round = currentPick?.round ?? 1;
-  const pickInRound = currentPick?.pickInRound ?? 1;
-  const userPicks = session.picks.filter(p => p.teamId === session.userTeamId);
-  const userPicksMade = userPicks.filter(p => p.prospect);
-  const userPicksRemaining = userPicks.filter(p => !p.prospect);
-
-  // Parse advisor text into structured sections
-  const advisorLines = advisorText.split('\n').filter(Boolean);
-
+function defaultProspectCard(prospect: BigBoardProspect, close: () => void): ReactNode {
+  const posPalette = POS[prospect.position] ?? { bg: T.blueSub, border: T.borderFoc, text: T.blueBright, pill: T.panel };
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: S.bg, overflow: 'hidden', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-
-      {/* Commentary banner */}
-      <AnimatePresence>
-        {commentary && (
-          <motion.div
-            initial={{ y: -36, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -36, opacity: 0 }}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50, padding: '7px 16px', background: commentaryType === 'user' ? `linear-gradient(to right, rgba(59,125,216,0.18), rgba(59,125,216,0.10))` : 'rgba(30,45,64,0.95)', borderBottom: `1px solid ${commentaryType === 'user' ? 'rgba(59,125,216,0.3)' : S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-          >
-            {commentaryType === 'user' && <span style={{ fontSize: 10, fontWeight: 700, color: S.blue, letterSpacing: '0.1em' }}>YOUR PICK</span>}
-            <span style={{ fontSize: 12, fontWeight: 500, color: commentaryType === 'user' ? '#a8c6f0' : S.txtSub }}>{commentary}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── TOP BAR ─────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '0 16px', height: 44, flexShrink: 0, background: S.surface, borderBottom: `1px solid ${S.border}`, gap: 16 }}>
-
-        {/* Logo + title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 80,
+        background: 'rgba(4, 9, 17, 0.7)',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 20,
+      }}
+      onClick={close}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: 'min(540px, 100%)',
+          background: T.surface,
+          border: `1px solid ${T.borderHi}`,
+          borderRadius: 14,
+          padding: 16,
+          color: T.txt,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: T.txtMuted, letterSpacing: '0.12em', fontWeight: 700 }}>PROSPECT CARD</div>
+            <div style={{ marginTop: 4, fontSize: 18, fontWeight: 800 }}>{prospect.fullName}</div>
+            <div style={{ marginTop: 3, fontSize: 12, color: T.txtSub }}>{prospect.school}</div>
+          </div>
           <button
-            onClick={() => { resetDraft(); navigate('/'); }}
-            style={{ width: 26, height: 26, borderRadius: 5, background: 'rgba(255,255,255,0.04)', border: `1px solid ${S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: S.txtSub, fontSize: 12 }}
-          >←</button>
-          <span style={{ fontSize: 13, fontWeight: 700, color: S.txt, letterSpacing: '-0.01em' }}>
-            Gridiron<span style={{ color: S.gold }}>IQ</span>
-          </span>
-          <span style={{ width: 1, height: 16, background: S.border }} />
-          <span style={{ fontSize: 11, fontWeight: 500, color: S.txtMuted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {session.picks[0]?.round === 1 ? '2026 NFL Draft' : 'Mock Draft'} — Live Board
-          </span>
-        </div>
-
-        {/* Clock indicator */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
-          {currentPick && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', borderRadius: 6, background: isUserTurn ? S.greenSub : S.elevated, border: `1px solid ${isUserTurn ? 'rgba(30,140,78,0.35)' : S.border}` }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: isUserTurn ? S.green : (currentTeam?.primaryColor ?? S.blue), flexShrink: 0, boxShadow: isUserTurn ? `0 0 6px ${S.green}` : 'none', animation: isUserTurn ? 'pulse 2s infinite' : 'none' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: isUserTurn ? '#4ade80' : S.txt }}>
-                {isUserTurn ? 'ON THE CLOCK — YOUR PICK' : `${currentTeam?.city ?? ''} ${currentTeam?.name ?? ''} on the clock`}
-              </span>
-              <span style={{ fontSize: 10, color: S.txtMuted, fontVariantNumeric: 'tabular-nums' }}>
-                Pick #{currentPick.overall} · Rd {round} · {pickInRound} of 32
-              </span>
-            </div>
-          )}
-          {isUserTurn && (
-            <PickClock seconds={90} onExpire={() => { if (filteredProspects[0]) handleMakePick(filteredProspects[0].id); }} />
-          )}
-        </div>
-
-        {/* Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Speed selector — always visible */}
-          {(['Fast', 'Normal', 'Slow'] as const).map((label, i) => {
-            const speeds = [400, 900, 1800];
-            const speed = speeds[i];
-            return (
-              <button
-                key={label}
-                onClick={() => setDraftSettings({ simSpeed: speed })}
-                style={{ fontSize: 9, padding: '3px 7px', borderRadius: 4, background: simSpeed === speed ? S.blueSub : 'transparent', border: `1px solid ${simSpeed === speed ? 'rgba(59,125,216,0.4)' : S.border}`, color: simSpeed === speed ? S.blue : S.txtMuted, cursor: 'pointer', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' as const }}
-              >
-                {label}
-              </button>
-            );
-          })}
-          {/* Pause/Resume — always visible */}
-          <button
-            onClick={() => setAutoSim(!autoSim)}
-            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: autoSim ? S.goldSub : S.elevated, border: `1px solid ${autoSim ? 'rgba(196,154,26,0.35)' : S.border}`, color: autoSim ? S.gold : S.txtSub, cursor: 'pointer', fontWeight: 600 }}
+            type="button"
+            onClick={close}
+            style={{
+              border: `1px solid ${T.border}`,
+              background: T.panel,
+              color: T.txtSub,
+              borderRadius: 8,
+              fontSize: 11,
+              padding: '6px 9px',
+              cursor: 'pointer',
+            }}
           >
-            {autoSim ? '⏸ Pause' : '▶ Resume'}
+            CLOSE
           </button>
-          {/* Sim controls — secondary */}
-          {!isUserTurn && (
-            <>
-              <button onClick={simulateNextPick} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: S.elevated, border: `1px solid ${S.border}`, color: S.txtSub, cursor: 'pointer', fontWeight: 500 }}>
-                Sim 1
-              </button>
-              <button onClick={simulateToUserPick} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: S.elevated, border: `1px solid ${S.border}`, color: S.txtSub, cursor: 'pointer', fontWeight: 500 }}>
-                Skip to My Pick →
-              </button>
-            </>
-          )}
-          {isUserTurn && (
-            <button onClick={() => setShowTrade(true)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: S.goldSub, border: `1px solid rgba(196,154,26,0.3)`, color: S.gold, cursor: 'pointer', fontWeight: 600 }}>
-              ⇄ Trade
-            </button>
-          )}
-          {compareList.length > 0 && (
-            <button onClick={clearCompare} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, background: S.redSub, border: `1px solid rgba(181,56,56,0.3)`, color: '#e07070', cursor: 'pointer', fontWeight: 600 }}>
-              × Compare ({compareList.length}/2)
-            </button>
-          )}
-          <button
-            onClick={() => setShowSettings(s => !s)}
-            style={{ fontSize: 14, width: 28, height: 28, borderRadius: 5, background: showSettings ? S.blueSub : S.elevated, border: `1px solid ${showSettings ? 'rgba(59,125,216,0.4)' : S.border}`, color: showSettings ? S.blue : S.txtSub, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title="Draft Settings"
-          >⚙</button>
+        </div>
+        <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              borderRadius: 999,
+              border: `1px solid ${posPalette.border}`,
+              background: posPalette.bg,
+              color: posPalette.text,
+              padding: '4px 8px',
+            }}
+          >
+            {prospect.position}
+          </span>
+          <span style={{ color: gradeColor(prospect.grade), fontWeight: 800 }}>{gradeLetter(prospect.grade)}</span>
+          <span style={{ color: T.txtSub, fontSize: 12 }}>Rank #{prospect.rank}</span>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* ── MAIN LAYOUT ─────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+function DraftBoardLayout({
+  userTeam,
+  teams,
+  picks,
+  prospects,
+  currentOverallPick,
+  speed = 'NORMAL',
+  paused = false,
+  simulationNumber = 1,
+  pickClock,
+  advisorLoading = false,
+  advisorIntel = null,
+  projectedUserPicks,
+  onSpeedChange,
+  onPauseToggle,
+  onSkipToMyPick,
+  onOpenProspectCard,
+  renderProspectCard,
+  tradeModal,
+  incomingTradeOffer,
+  compareModal,
+  style,
+}: DraftBoardPageProps) {
+  const [activePosition, setActivePosition] = useState<(typeof POSITION_FILTERS)[number]>('ALL');
+  const [selectedProspect, setSelectedProspect] = useState<BigBoardProspect | null>(null);
 
-        {/* ── LEFT: BIG BOARD ─────────────────────────────────────────────── */}
-        <div style={{ width: 288, display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: `1px solid ${S.border}` }}>
+  const teamLookup = useMemo(() => {
+    const map = new Map<string, TeamInfo>();
+    teams.forEach((team) => map.set(team.abbreviation, team));
+    map.set(userTeam.abbreviation, userTeam);
+    return map;
+  }, [teams, userTeam]);
 
-          {/* Header */}
-          <SectionHead right={<span style={{ fontSize: 10, color: S.txtMuted, fontVariantNumeric: 'tabular-nums' }}>{availableProspects.length} remaining</span>}>
-            Big Board
-          </SectionHead>
+  const currentPick = useMemo(() => picks.find((pick) => pick.overall === currentOverallPick) ?? null, [picks, currentOverallPick]);
+  const onClockTeam = useMemo(() => {
+    if (!currentPick) return userTeam;
+    return teamLookup.get(currentPick.team.abbreviation) ?? { abbreviation: currentPick.team.abbreviation, name: currentPick.team.abbreviation, needs: [] };
+  }, [currentPick, teamLookup, userTeam]);
 
-          {/* Search */}
-          <div style={{ padding: '6px 8px', borderBottom: `1px solid ${S.border}` }}>
-            <input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search player or school…"
-              style={{ width: '100%', background: S.elevated, border: `1px solid ${S.border}`, borderRadius: 5, padding: '4px 8px', fontSize: 11, color: S.txt, outline: 'none', boxSizing: 'border-box' }}
-            />
+  const isUsersTurn = onClockTeam.abbreviation === userTeam.abbreviation;
+  const currentRound = currentPick?.round ?? projectedRoundFromOverall(currentOverallPick);
+  const currentPickInRound = currentPick?.pickInRound ?? projectedPickInRound(currentOverallPick);
+  const currentNeed = onClockTeam.needs[0] ?? '';
+
+  const draftedNames = useMemo(() => {
+    const set = new Set<string>();
+    picks.forEach((pick) => {
+      const n = pick.player?.fullName ?? pick.player?.name;
+      if (n) set.add(keyFromName(n));
+    });
+    return set;
+  }, [picks]);
+
+  const remainingProspects = useMemo(
+    () => prospects.filter((prospect) => !draftedNames.has(keyFromName(prospect.fullName))),
+    [prospects, draftedNames],
+  );
+
+  const filteredProspects = useMemo(() => {
+    const sorted = remainingProspects.slice().sort((a, b) => a.rank - b.rank);
+    if (activePosition === 'ALL') return sorted;
+    return sorted.filter((prospect) => prospect.position === activePosition);
+  }, [remainingProspects, activePosition]);
+
+  const myPicksTotal = Math.max(7, picks.filter((pick) => pick.isUserTeam).length || 7);
+  const myCompletedPicks = picks.filter((pick) => pick.isUserTeam && pick.player);
+  const myUpcomingFromBoard = picks
+    .filter((pick) => pick.isUserTeam && !pick.player)
+    .slice()
+    .sort((a, b) => a.overall - b.overall)
+    .map((pick, idx) => ({
+      round: pick.round,
+      overall: pick.overall,
+      positionProjection:
+        remainingProspects[Math.min(idx, Math.max(remainingProspects.length - 1, 0))]?.position ?? (userTeam.needs[idx] ?? userTeam.needs[0] ?? 'BPA'),
+    }));
+  const myUpcomingPicks = projectedUserPicks ?? myUpcomingFromBoard;
+
+  const runningGrade = useMemo(() => {
+    if (!myCompletedPicks.length) return 70;
+    const total = myCompletedPicks.reduce((sum, pick) => sum + (pick.player?.grade ?? 70), 0);
+    return total / myCompletedPicks.length;
+  }, [myCompletedPicks]);
+
+  const recentPicks = useMemo(() => {
+    return picks
+      .filter((pick) => pick.player)
+      .slice()
+      .sort((a, b) => b.overall - a.overall)
+      .slice(0, 5);
+  }, [picks]);
+
+  const closeProspectCard = () => setSelectedProspect(null);
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        height: '100vh',
+        background: T.bg,
+        color: T.txt,
+        fontFamily: T.fontBase,
+        display: 'flex',
+        flexDirection: 'column',
+        ...style,
+      }}
+    >
+      <style>
+        {`
+          @keyframes commandPulse {
+            0% { opacity: 0.55; transform: scale(0.95); }
+            50% { opacity: 1; transform: scale(1.05); }
+            100% { opacity: 0.55; transform: scale(0.95); }
+          }
+
+          @keyframes skeletonShimmer {
+            0% { background-position: -200px 0; }
+            100% { background-position: calc(200px + 100%) 0; }
+          }
+
+          .position-filter-pill {
+            border: 1px solid ${T.border};
+            background: ${T.panel};
+            color: ${T.txtSub};
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            padding: 4px 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            white-space: nowrap;
+          }
+
+          .position-filter-pill.active {
+            color: ${T.blueBright};
+            border-color: ${T.borderFoc};
+            background: ${T.blueSub};
+          }
+
+          .big-board-row {
+            border: 1px solid transparent;
+            border-radius: 7px;
+            transition: background 120ms ease, border-color 120ms ease;
+          }
+
+          .big-board-row:hover {
+            background: ${T.elevated};
+            border-color: ${T.borderHi};
+          }
+
+          .advisor-skeleton {
+            height: 9px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, ${T.panel} 0px, ${T.elevated} 40px, ${T.panel} 80px);
+            background-size: 200px 9px;
+            animation: skeletonShimmer 1.2s linear infinite;
+          }
+        `}
+      </style>
+
+      <header
+        style={{
+          height: 44,
+          minHeight: 44,
+          borderBottom: `1px solid ${T.border}`,
+          background: T.surface,
+          display: 'grid',
+          gridTemplateColumns: '1fr auto 1fr',
+          gap: 10,
+          alignItems: 'center',
+          padding: '0 12px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <div
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: 5,
+              background: `linear-gradient(135deg, ${T.blueBright} 0%, ${T.blue} 100%)`,
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 10,
+              color: T.txtInvert,
+              fontWeight: 900,
+            }}
+          >
+            GIQ
           </div>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: T.txtSub, whiteSpace: 'nowrap' }}>
+            2026 NFL DRAFT — LIVE BOARD
+          </div>
+        </div>
 
-          {/* Position filter tabs */}
-          <div style={{ padding: '5px 6px', borderBottom: `1px solid ${S.border}`, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-            {POSITIONS.map(pos => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <img src={teamLogoUrl(onClockTeam.abbreviation)} alt={`${onClockTeam.name} logo`} style={{ width: 24, height: 24, objectFit: 'contain' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: T.txt, fontSize: 12, whiteSpace: 'nowrap' }}>
+            <span style={{ fontWeight: 700 }}>{onClockTeam.name.toUpperCase()} ON THE CLOCK</span>
+            <span style={{ color: T.txtSub }}>
+              Pick #{currentOverallPick} · Rd {currentRound} · {currentPickInRound} of 32
+            </span>
+            {isUsersTurn && (
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: T.blueBright,
+                  animation: 'commandPulse 1.1s ease-in-out infinite',
+                }}
+              />
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {SPEEDS.map((item) => (
               <button
-                key={pos}
-                onClick={() => setPosFilter(pos)}
-                style={{ fontSize: 9, padding: '2px 5px', borderRadius: 3, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em', background: posFilter === pos ? (POSITION_COLORS[pos]?.bg ?? S.blueSub) : 'transparent', border: `1px solid ${posFilter === pos ? (POSITION_COLORS[pos]?.border ?? S.blue) : 'transparent'}`, color: posFilter === pos ? (POSITION_COLORS[pos]?.text ?? S.txt) : S.txtMuted }}
+                key={item}
+                type="button"
+                onClick={() => onSpeedChange?.(item)}
+                style={{
+                  border: `1px solid ${speed === item ? T.borderFoc : T.border}`,
+                  background: speed === item ? T.blueSub : T.panel,
+                  color: speed === item ? T.blueBright : T.txtSub,
+                  borderRadius: 7,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                }}
               >
-                {pos}
+                {item}
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={onPauseToggle}
+            style={{
+              border: `1px solid ${paused ? T.borderFoc : T.border}`,
+              background: paused ? T.blueSub : T.panel,
+              color: paused ? T.blueBright : T.txtSub,
+              borderRadius: 7,
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '4px 9px',
+              cursor: 'pointer',
+            }}
+          >
+            PAUSE
+          </button>
+          <div
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 7,
+              background: T.panel,
+              color: T.txtSub,
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '4px 8px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Sim {simulationNumber}
+          </div>
+          <button
+            type="button"
+            onClick={onSkipToMyPick}
+            style={{
+              border: `1px solid ${T.borderFoc}`,
+              borderRadius: 7,
+              background: T.blueSub,
+              color: T.blueBright,
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '4px 8px',
+              cursor: 'pointer',
+            }}
+          >
+            Skip to My Pick →
+          </button>
+          {pickClock}
+        </div>
+      </header>
 
-          {/* Prospect rows */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {filteredProspects.map((prospect, idx) => {
-              const isSelected = selectedProspect?.id === prospect.id;
-              const inCompare = compareList.some(p => p.id === prospect.id);
+      <main
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'grid',
+          gridTemplateColumns: '280px minmax(0, 1fr) 300px',
+          gap: 0,
+        }}
+      >
+        <aside
+          style={{
+            minHeight: 0,
+            borderRight: `1px solid ${T.border}`,
+            background: T.surface,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{ padding: '10px 10px 8px', borderBottom: `1px solid ${T.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: T.txtSub }}>BIG BOARD</div>
+              <div style={{ fontSize: 10, color: T.txtMuted, fontWeight: 700 }}>{remainingProspects.length} remaining</div>
+            </div>
+            <div style={{ marginTop: 8, display: 'flex', overflowX: 'auto', gap: 6, paddingBottom: 2 }}>
+              {POSITION_FILTERS.map((position) => (
+                <button
+                  key={position}
+                  type="button"
+                  className={`position-filter-pill${activePosition === position ? ' active' : ''}`}
+                  onClick={() => setActivePosition(position)}
+                >
+                  {position}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 8 }}>
+            {filteredProspects.map((prospect) => {
+              const posPalette = POS[prospect.position] ?? { bg: T.blueSub, border: T.borderFoc, text: T.blueBright, pill: T.panel };
+              const valueTag = resolveValueTag(prospect);
+              const needMatch = Boolean(currentNeed && prospect.position === currentNeed);
               return (
-                <motion.div key={prospect.id} layout initial={lastPickAnim === prospect.id ? { opacity: 0 } : false}>
-
-                  {/* Main row */}
+                <button
+                  key={`${prospect.rank}-${prospect.fullName}`}
+                  type="button"
+                  className="big-board-row"
+                  onClick={() => {
+                    setSelectedProspect(prospect);
+                    onOpenProspectCard?.(prospect);
+                  }}
+                  style={{
+                    width: '100%',
+                    height: 40,
+                    display: 'grid',
+                    gridTemplateColumns: '24px 32px minmax(0, 1fr) auto auto',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '0 6px',
+                    textAlign: 'left',
+                    background: needMatch ? rowNeedTint(prospect.position) : 'transparent',
+                    marginBottom: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ color: T.txtMuted, fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>{prospect.rank}</div>
                   <div
-                    onClick={() => setSelectedProspect(isSelected ? null : prospect)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${S.border}`, cursor: 'pointer', background: isSelected ? S.blueSub : inCompare ? S.goldSub : 'transparent', transition: 'background 0.1s' }}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 7,
+                      border: `1px solid ${gradeColor(prospect.grade)}`,
+                      color: gradeColor(prospect.grade),
+                      background: `${gradeColor(prospect.grade)}1A`,
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontSize: 11,
+                      fontWeight: 800,
+                    }}
                   >
-                    {/* Rank */}
-                    <span style={{ fontSize: 9, color: S.txtMuted, width: 20, textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</span>
-
-                    {/* Grade */}
-                    <GradeBadge grade={prospect.grade} size="sm" />
-
-                    {/* Name + info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: S.txt, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prospect.name}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                        <PosBadge position={prospect.position} />
-                        <span style={{ fontSize: 10, color: S.txtSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prospect.college}</span>
-                      </div>
+                    {gradeLetter(prospect.grade)}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        color: T.txt,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {prospect.fullName}
                     </div>
-
-                    {/* Value + actions */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-                      <ValueBadge prospect={prospect} pickNumber={currentPick?.overall ?? 1} />
-                      <div style={{ display: 'flex', gap: 3 }}>
-                        {isUserTurn && (
-                          <button
-                            onClick={e => { e.stopPropagation(); handleMakePick(prospect.id); }}
-                            style={{ fontSize: 9, padding: '2px 7px', borderRadius: 3, background: `linear-gradient(135deg, ${S.blue}cc, ${S.blue}88)`, border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 700, letterSpacing: '0.04em' }}
-                          >DRAFT</button>
-                        )}
-                        <button
-                          onClick={e => { e.stopPropagation(); if (!inCompare) addToCompare(prospect); }}
-                          style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: inCompare ? S.goldSub : S.elevated, border: `1px solid ${inCompare ? 'rgba(196,154,26,0.3)' : S.border}`, color: inCompare ? S.gold : S.txtMuted, cursor: 'pointer', fontWeight: 600 }}
-                        >CMP</button>
-                        <span style={{ fontSize: 9, color: S.txtMuted, padding: '1px 0' }}>R{prospect.round}</span>
-                      </div>
+                    <div style={{ color: T.txtSub, fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {prospect.school}
                     </div>
                   </div>
-
-                  {/* Expanded detail */}
-                  <AnimatePresence>
-                    {isSelected && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
-                        <div style={{ borderBottom: `1px solid ${S.border}` }}>
-                          <ProspectCard prospect={prospect} />
-                          {isUserTurn && (
-                            <div style={{ padding: '0 12px 12px' }}>
-                              <button
-                                onClick={e => { e.stopPropagation(); handleMakePick(prospect.id); }}
-                                style={{ width: '100%', padding: '8px', borderRadius: 6, background: `linear-gradient(135deg, ${S.blue}cc, ${S.blue}88)`, border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.06em', boxShadow: `0 2px 12px ${S.blue}44` }}
-                              >
-                                DRAFT {prospect.name.toUpperCase()}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
+                  <span
+                    style={{
+                      fontSize: 8,
+                      fontWeight: 800,
+                      letterSpacing: '0.04em',
+                      color: posPalette.text,
+                      border: `1px solid ${posPalette.border}`,
+                      background: posPalette.bg,
+                      borderRadius: 999,
+                      padding: '3px 6px',
+                    }}
+                  >
+                    {prospect.position}
+                  </span>
+                  <span style={{ fontSize: 8, fontWeight: 800, color: VALUE_COLORS[valueTag], letterSpacing: '0.04em' }}>{valueTag}</span>
+                </button>
               );
             })}
           </div>
-        </div>
+        </aside>
 
-        {/* ── CENTER: DRAFT BOARD ──────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <SectionHead right={<span style={{ fontSize: 10, color: S.txtMuted }}>Pick {session.currentPickIndex + 1} of {session.picks.length}</span>}>
-            Draft Board
-          </SectionHead>
-          <BoardAnalytics session={session} />
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <DraftBoard picks={session.picks} currentPickIndex={session.currentPickIndex} userTeamId={session.userTeamId} />
-          </div>
-        </div>
+        <section style={{ minHeight: 0, background: T.bg, padding: 8 }}>
+          <DraftBoard
+            picks={picks}
+            currentOverallPick={currentOverallPick}
+            rounds={Math.max(1, Math.ceil((Math.max(...picks.map((pick) => pick.overall), 224)) / 32))}
+            picksPerRound={32}
+            style={{ width: '100%', height: '100%' }}
+          />
+        </section>
 
-        {/* ── RIGHT: WAR ROOM ──────────────────────────────────────────────── */}
-        <div style={{ width: 272, display: 'flex', flexDirection: 'column', flexShrink: 0, borderLeft: `1px solid ${S.border}` }}>
-
-          {/* My Team header */}
-          <SectionHead right={
-            userTeam && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ width: 18, height: 18, borderRadius: '50%', background: userTeam.primaryColor, flexShrink: 0 }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: S.txt }}>{userTeam.abbreviation}</span>
-              </div>
-            )
-          }>
-            War Room
-          </SectionHead>
-
-          {/* Team needs */}
-          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${S.border}` }}>
-            <Label>Team Needs</Label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-              {(userTeam?.needs ?? []).slice(0, 6).map((need, i) => (
-                <span key={need} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: i === 0 ? S.redSub : i <= 2 ? S.goldSub : S.elevated, border: `1px solid ${i === 0 ? 'rgba(181,56,56,0.3)' : i <= 2 ? 'rgba(196,154,26,0.25)' : S.border}`, color: i === 0 ? '#e07070' : i <= 2 ? S.gold : S.txtSub, fontWeight: 600 }}>
-                  {need}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* My picks */}
-          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${S.border}` }}>
-            <Label>My Picks — {userPicksMade.length} of {userPicks.length}</Label>
-            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {userPicksMade.length === 0 && (
-                <span style={{ fontSize: 11, color: S.txtMuted }}>No picks made yet</span>
+        <aside
+          style={{
+            minHeight: 0,
+            borderLeft: `1px solid ${T.border}`,
+            background: T.surface,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            padding: 10,
+            overflowY: 'auto',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: T.txtSub }}>WAR ROOM</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              {userTeam.avatarUrl ? (
+                <img src={userTeam.avatarUrl} alt={`${userTeam.abbreviation} avatar`} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <div
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    border: `1px solid ${T.borderFoc}`,
+                    background: T.blueSub,
+                    color: T.blueBright,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    display: 'grid',
+                    placeItems: 'center',
+                  }}
+                >
+                  {initials(userTeam)}
+                </div>
               )}
-              {userPicksMade.slice(-5).map(pick => pick.prospect && (
-                <div key={pick.overall} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <GradeBadge grade={pick.prospect.grade} size="sm" />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: S.txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.prospect.name}</div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <PosBadge position={pick.prospect.position} />
-                      <span style={{ fontSize: 9, color: S.txtMuted }}>Rd{pick.round} #{pick.overall}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <span style={{ color: T.txt, fontSize: 11, fontWeight: 700 }}>{userTeam.abbreviation}</span>
             </div>
           </div>
 
-          {/* Upcoming user picks */}
-          {userPicksRemaining.length > 0 && (
-            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${S.border}` }}>
-              <Label>Upcoming Picks</Label>
-              <div style={{ marginTop: 5, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {userPicksRemaining.slice(0, 5).map(pick => (
-                  <div key={pick.overall} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 6px', borderRadius: 4, background: pick.overall === currentPick?.overall ? S.greenSub : S.elevated, border: `1px solid ${pick.overall === currentPick?.overall ? 'rgba(30,140,78,0.35)' : S.border}` }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: pick.overall === currentPick?.overall ? S.green : S.txtMuted, width: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{pick.overall}</span>
-                    <span style={{ fontSize: 10, color: S.txtSub }}>Round {pick.round}, Pick {pick.pickInRound}</span>
-                    {pick.overall === currentPick?.overall && <span style={{ fontSize: 9, color: S.green, fontWeight: 700 }}>NOW</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* AI War Room Advisor */}
-          {aiAdvisorEnabled && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <SectionHead right={advisorLoading ? <span style={{ fontSize: 9, color: S.green, animation: 'pulse 1.5s infinite' }}>● LIVE</span> : null}>
-                AI War Room Advisor
-              </SectionHead>
-
-              <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
-                {!isUserTurn && !advisorText && (
-                  <div style={{ color: S.txtMuted, fontSize: 11, lineHeight: 1.6 }}>
-                    Advisor activates on your pick. Use the controls to advance the board.
-                  </div>
-                )}
-
-                {advisorLoading && !advisorText && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {[100, 80, 90, 70].map((w, i) => (
-                      <div key={i} style={{ height: 10, width: `${w}%`, borderRadius: 3, background: S.elevated, animation: 'pulse 1.5s infinite' }} />
-                    ))}
-                    <div style={{ fontSize: 10, color: S.txtMuted, marginTop: 4 }}>Analyzing board…</div>
-                  </div>
-                )}
-
-                {advisorText && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {advisorLines.map((line, i) => {
-                      const isPickLine = line.startsWith('PICK:');
-                      const isFitLine = line.startsWith('FIT:');
-                      const isIntelLine = line.startsWith('INTEL:');
-                      const isConcernLine = line.startsWith('CONCERN:');
-
-                      if (isPickLine) {
-                        const val = line.replace('PICK:', '').trim();
-                        return (
-                          <div key={i} style={{ padding: '8px 10px', borderRadius: 6, background: S.blueSub, border: `1px solid rgba(59,125,216,0.25)` }}>
-                            <Label>Recommendation</Label>
-                            <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, color: S.txt }}>{val}</div>
-                          </div>
-                        );
-                      }
-
-                      const labelMap: Record<string, string> = { 'FIT:': 'Scheme Fit', 'INTEL:': 'Board Intel', 'CONCERN:': 'Concern' };
-                      const colorMap: Record<string, string> = { 'FIT:': S.green, 'INTEL:': S.gold, 'CONCERN:': S.red };
-                      const bgMap: Record<string, string> = { 'FIT:': S.greenSub, 'INTEL:': S.goldSub, 'CONCERN:': S.redSub };
-                      const borderMap: Record<string, string> = { 'FIT:': 'rgba(30,140,78,0.2)', 'INTEL:': 'rgba(196,154,26,0.2)', 'CONCERN:': 'rgba(181,56,56,0.2)' };
-
-                      const prefix = Object.keys(labelMap).find(k => line.startsWith(k));
-                      if (prefix) {
-                        const val = line.replace(prefix, '').trim();
-                        return (
-                          <div key={i} style={{ padding: '7px 10px', borderRadius: 6, background: bgMap[prefix], border: `1px solid ${borderMap[prefix]}` }}>
-                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: colorMap[prefix], marginBottom: 3 }}>{labelMap[prefix]}</div>
-                            <div style={{ fontSize: 11, color: S.txtSub, lineHeight: 1.5 }}>{val}</div>
-                          </div>
-                        );
-                      }
-
-                      return <div key={i} style={{ fontSize: 11, color: S.txtSub, lineHeight: 1.6 }}>{line}</div>;
-                    })}
-
-                    {/* Take him button */}
-                    {isUserTurn && (() => {
-                      const pickLine = advisorLines.find(l => l.startsWith('PICK:'))?.replace('PICK:', '').trim();
-                      if (!pickLine) return null;
-                      // Try to find the recommended prospect
-                      const words = pickLine.toLowerCase().split(/[\s,()]+/);
-                      const match = availableProspects.find(p => words.some(w => w && p.name.toLowerCase().includes(w) && w.length > 3));
-                      if (!match) return null;
-                      return (
-                        <button
-                          onClick={() => handleMakePick(match.id)}
-                          style={{ width: '100%', padding: '9px', borderRadius: 6, background: `linear-gradient(135deg, ${S.blue}cc, ${S.blue}88)`, border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.05em', boxShadow: `0 2px 12px ${S.blue}44`, marginTop: 4 }}
-                        >
-                          DRAFT {match.name.split(' ').slice(-1)[0].toUpperCase()}  ▸
-                        </button>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── MODALS ────────────────────────────────────────────────────────── */}
-      {showTrade && session && <TradeModal session={session} onClose={() => setShowTrade(false)} />}
-      {compareList.length >= 2 && <ProspectCompare prospects={compareList as [Prospect, Prospect]} onClose={clearCompare} canDraft={isUserTurn} onDraft={isUserTurn ? (id) => { handleMakePick(id); clearCompare(); } : undefined} />}
-      <AnimatePresence>
-        {incomingTradeOffer && (
-          <IncomingTradeOffer offer={incomingTradeOffer} currentPickIndex={session?.currentPickIndex ?? 0} userPicks={userPicks} onAccept={() => respondToAITradeOffer(true)} onDecline={() => respondToAITradeOffer(false)} />
-        )}
-      </AnimatePresence>
-
-      {/* ── SETTINGS DRAWER ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            style={{ position: 'absolute', top: 48, right: 16, zIndex: 60, width: 280, background: S.surface, border: `1px solid ${S.borderHi}`, borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden' }}
+          <section
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              background: T.panel,
+              padding: 10,
+            }}
           >
-            <div style={{ padding: '10px 14px', borderBottom: `1px solid ${S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: S.txt, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Draft Settings</span>
-              <button onClick={() => setShowSettings(false)} style={{ fontSize: 14, color: S.txtMuted, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.14em', marginBottom: 8 }}>TEAM NEEDS</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {userTeam.needs.slice(0, 5).map((need, idx) => {
+                const palette = POS[need] ?? { bg: T.blueSub, border: T.borderFoc, text: T.blueBright, pill: T.panel };
+                return (
+                  <div key={`${need}-${idx}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {idx === 0 && (
+                      <div style={{ fontSize: 8, color: T.goldBright, fontWeight: 800, letterSpacing: '0.06em' }}>PRIMARY NEED</div>
+                    )}
+                    <span
+                      style={{
+                        fontSize: 8,
+                        fontWeight: 800,
+                        letterSpacing: '0.05em',
+                        borderRadius: 999,
+                        border: `1px solid ${palette.border}`,
+                        background: palette.bg,
+                        color: palette.text,
+                        padding: '4px 7px',
+                      }}
+                    >
+                      #{idx + 1} {need}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          </section>
 
-              {/* Needs vs BPA */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: S.txt }}>Needs vs BPA</span>
-                  <span style={{ fontSize: 9, color: S.txtMuted }}>
-                    {needsWeight < 25 ? 'Pure BPA' : needsWeight < 45 ? 'BPA Lean' : needsWeight <= 55 ? 'Balanced' : needsWeight < 75 ? 'Needs Lean' : 'Pure Needs'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 9, color: S.txtMuted, width: 28 }}>BPA</span>
-                  <input type="range" min={0} max={100} value={needsWeight}
-                    onChange={e => setDraftSettings({ needsWeight: Number(e.target.value) })}
-                    style={{ flex: 1, accentColor: S.blue }} />
-                  <span style={{ fontSize: 9, color: S.txtMuted, width: 36, textAlign: 'right' }}>Needs</span>
-                </div>
-                <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 3 }}>How much CPU teams prioritize roster needs vs. best player available</div>
-              </div>
-
-              {/* Position Scarcity */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: S.txt }}>Position Scarcity Weight</span>
-                  <span style={{ fontSize: 9, color: S.txtMuted }}>{positionWeight}%</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 9, color: S.txtMuted, width: 28 }}>Low</span>
-                  <input type="range" min={0} max={100} value={positionWeight}
-                    onChange={e => setDraftSettings({ positionWeight: Number(e.target.value) })}
-                    style={{ flex: 1, accentColor: S.blue }} />
-                  <span style={{ fontSize: 9, color: S.txtMuted, width: 36, textAlign: 'right' }}>High</span>
-                </div>
-                <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 3 }}>How heavily CPU teams weigh premium positions (QB, EDGE, OT) over others</div>
-              </div>
-
-              {/* Trade Frequency */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: S.txt }}>Trade Offer Frequency</span>
-                  <span style={{ fontSize: 9, color: S.txtMuted }}>
-                    {tradeFrequency < 15 ? 'Rare' : tradeFrequency < 35 ? 'Low' : tradeFrequency < 60 ? 'Normal' : tradeFrequency < 80 ? 'Active' : 'Frenzy'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 9, color: S.txtMuted, width: 28 }}>Rare</span>
-                  <input type="range" min={0} max={100} value={tradeFrequency}
-                    onChange={e => setDraftSettings({ tradeFrequency: Number(e.target.value) })}
-                    style={{ flex: 1, accentColor: S.gold }} />
-                  <span style={{ fontSize: 9, color: S.txtMuted, width: 36, textAlign: 'right' }}>Crazy</span>
-                </div>
-                <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 3 }}>How often CPU teams call you with trade offers on your pick</div>
-              </div>
-
-              {/* Draft Craziness */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: S.txt }}>Draft Craziness</span>
-                  <span style={{ fontSize: 9, color: S.txtMuted }}>
-                    {draftCraziness < 20 ? 'Predictable' : draftCraziness < 45 ? 'Realistic' : draftCraziness < 70 ? 'Unpredictable' : 'Chaos'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 9, color: S.txtMuted, width: 28 }}>Sim</span>
-                  <input type="range" min={0} max={100} value={draftCraziness}
-                    onChange={e => setDraftSettings({ draftCraziness: Number(e.target.value) })}
-                    style={{ flex: 1, accentColor: S.red }} />
-                  <span style={{ fontSize: 9, color: S.txtMuted, width: 36, textAlign: 'right' }}>Wild</span>
-                </div>
-                <div style={{ fontSize: 9, color: S.txtMuted, marginTop: 3 }}>How randomly CPU teams deviate from their top pick — high = more surprises</div>
-              </div>
-
+          <section
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              background: T.panel,
+              padding: 10,
+            }}
+          >
+            <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.14em', marginBottom: 8 }}>
+              MY PICKS — {myCompletedPicks.length} of {myPicksTotal}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {myUpcomingPicks.slice(0, 6).map((pick) => (
+                <div
+                  key={`my-proj-${pick.round}-${pick.overall}`}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '38px 44px 1fr',
+                    gap: 6,
+                    alignItems: 'center',
+                    padding: '5px 6px',
+                    borderRadius: 7,
+                    border: `1px solid ${T.border}`,
+                    background: T.elevated,
+                  }}
+                >
+                  <span style={{ fontSize: 10, color: T.txtSub, fontWeight: 700 }}>RD {pick.round}</span>
+                  <span style={{ fontSize: 10, color: T.txtMuted, fontWeight: 700 }}>#{pick.overall}</span>
+                  <span style={{ fontSize: 11, color: T.txt, fontWeight: 700 }}>{pick.positionProjection}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              background: T.panel,
+              padding: 10,
+            }}
+          >
+            <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.14em', marginBottom: 8 }}>AI WAR ROOM ADVISOR</div>
+            {advisorLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="advisor-skeleton" style={{ width: '58%' }} />
+                <div className="advisor-skeleton" style={{ width: '92%' }} />
+                <div className="advisor-skeleton" style={{ width: '84%' }} />
+                <div className="advisor-skeleton" style={{ width: '67%' }} />
+              </div>
+            ) : advisorIntel ? (
+              <div
+                style={{
+                  borderRadius: 9,
+                  border: `1px solid ${T.gold}`,
+                  background: T.goldSub,
+                  padding: 9,
+                }}
+              >
+                <div style={{ fontSize: 9, color: T.goldBright, fontWeight: 900, letterSpacing: '0.08em' }}>⚡ WAR ROOM INTEL</div>
+                <div style={{ marginTop: 7, fontSize: 11, color: T.txt }}>
+                  <strong>PICK:</strong> {advisorIntel.pick}
+                </div>
+                <div style={{ marginTop: 4, fontSize: 11, color: T.txtSub }}>
+                  <strong>FIT:</strong> {advisorIntel.fit}
+                </div>
+                <div style={{ marginTop: 4, fontSize: 11, color: T.txtSub }}>
+                  <strong>INTEL:</strong> {advisorIntel.intel}
+                </div>
+                {advisorIntel.concern && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: T.amber }}>
+                    <strong>CONCERN:</strong> {advisorIntel.concern}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ color: T.txtSub, fontSize: 11 }}>Advisor standing by for next actionable window.</div>
+            )}
+          </section>
+
+          <section
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              background: T.panel,
+              padding: 10,
+            }}
+          >
+            <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.14em', marginBottom: 8 }}>DRAFT GRADE TRACKER</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span
+                style={{
+                  minWidth: 44,
+                  textAlign: 'center',
+                  borderRadius: 999,
+                  border: `1px solid ${gradeColor(runningGrade)}`,
+                  color: gradeColor(runningGrade),
+                  background: `${gradeColor(runningGrade)}1A`,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  padding: '4px 8px',
+                }}
+              >
+                {gradeLetter(runningGrade)}
+              </span>
+              <span style={{ color: T.txtSub, fontSize: 11, fontWeight: 600 }}>
+                Avg grade {runningGrade.toFixed(1)} across {myCompletedPicks.length || 0} user picks
+              </span>
+            </div>
+          </section>
+
+          <section
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              background: T.panel,
+              padding: 10,
+            }}
+          >
+            <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 800, letterSpacing: '0.14em', marginBottom: 8 }}>RECENT PICKS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {recentPicks.map((pick) => {
+                const name = pick.player?.fullName ?? pick.player?.name ?? 'Unknown';
+                return (
+                  <div key={`recent-${pick.overall}`} style={{ display: 'grid', gridTemplateColumns: '20px 1fr auto', alignItems: 'center', gap: 7 }}>
+                    <img src={teamLogoUrl(pick.team.abbreviation)} alt={`${pick.team.abbreviation} logo`} style={{ width: 18, height: 18, objectFit: 'contain' }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 10, color: T.txt, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {lastName(name)}
+                      </div>
+                      <div style={{ fontSize: 9, color: T.txtSub }}>#{pick.overall}</div>
+                    </div>
+                    <div style={{ fontSize: 9, color: T.txtMuted, fontWeight: 700 }}>{pick.player?.position ?? 'BPA'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      {incomingTradeOffer}
+      {tradeModal}
+      {compareModal}
+
+      {selectedProspect &&
+        (renderProspectCard ? renderProspectCard(selectedProspect, closeProspectCard) : defaultProspectCard(selectedProspect, closeProspectCard))}
     </div>
   );
 }
+
+// ─── Store-connected page (used by App router with no props) ─────────────────
+export function DraftBoardPage() {
+  const { session, availableProspects } = useDraftStore();
+
+  const teamMap = useMemo(() => {
+    const m = new Map<string, typeof NFL_TEAMS[number]>();
+    NFL_TEAMS.forEach((t) => m.set(t.id, t));
+    return m;
+  }, []);
+
+  const toTeamInfo = (teamId: string): TeamInfo => {
+    const t = teamMap.get(teamId);
+    return {
+      abbreviation: t?.abbreviation ?? teamId.toUpperCase(),
+      city: t?.city,
+      name: t?.name ?? teamId,
+      needs: (t?.needs ?? []) as string[],
+    };
+  };
+
+  const teams: TeamInfo[] = useMemo(
+    () => NFL_TEAMS.map((t) => toTeamInfo(t.id)),
+    [teamMap]
+  );
+
+  const userTeam: TeamInfo = useMemo(
+    () => (session ? toTeamInfo(session.userTeamId) : { abbreviation: '', name: '', needs: [] }),
+    [session, teamMap]
+  );
+
+  const picks: DraftPick[] = useMemo(
+    () =>
+      (session?.picks ?? []).map((p) => ({
+        round: p.round,
+        pickInRound: p.pickInRound,
+        overall: p.overall,
+        team: { abbreviation: teamMap.get(p.teamId)?.abbreviation ?? p.teamId.toUpperCase() },
+        player: p.prospect
+          ? { id: p.prospect.id, fullName: p.prospect.name, position: p.prospect.position, grade: p.prospect.grade }
+          : null,
+        isUserTeam: p.isUserPick,
+        outcome: null,
+      })),
+    [session, teamMap]
+  );
+
+  const prospects: BigBoardProspect[] = useMemo(
+    () =>
+      availableProspects.map((p, i) => ({
+        id: p.id,
+        rank: i + 1,
+        fullName: p.name,
+        school: p.college,
+        position: p.position,
+        grade: p.grade,
+        valueTag: undefined,
+      })),
+    [availableProspects]
+  );
+
+  const currentOverallPick = session
+    ? (session.picks[session.currentPickIndex]?.overall ?? 1)
+    : 1;
+
+  return (
+    <DraftBoardLayout
+      userTeam={userTeam}
+      teams={teams}
+      picks={picks}
+      prospects={prospects}
+      currentOverallPick={currentOverallPick}
+    />
+  );
+}
+
+export default DraftBoardPage;
