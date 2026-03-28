@@ -1,10 +1,7 @@
 /**
  * Vercel Serverless Function — /api/scouting/deep-dive
- * Uses @anthropic-ai/sdk (available in root node_modules via workspaces).
+ * Uses native fetch (Node 20 built-in) to avoid node-fetch header validation issues.
  */
-import Anthropic from '@anthropic-ai/sdk';
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY?.trim() });
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -19,7 +16,8 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'name and position required' });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const apiKey = (process.env.ANTHROPIC_API_KEY ?? '').trim();
+  if (!apiKey) {
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   }
 
@@ -50,20 +48,55 @@ Write a comprehensive 5-paragraph scouting report covering:
 Write like a scout with 20 years of experience. Be specific, vivid, and opinionated.`;
 
   try {
-    const stream = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1200,
-      stream: true,
-      messages: [{ role: 'user', content: prompt }],
+    const upstream = await (globalThis as any).fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1200,
+        stream: true,
+        messages: [{ role: 'user', content: prompt }],
+      }),
     });
+
+    if (!upstream.ok) {
+      const errText = await upstream.text().catch(() => 'unknown');
+      console.error('[deep-dive] upstream error', upstream.status, errText);
+      return res.status(502).json({ error: 'Anthropic API error', detail: errText.slice(0, 200) });
+    }
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
     res.setHeader('Cache-Control', 'no-cache');
 
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        res.write(event.delta.text);
+    const reader = upstream.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(data);
+          if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+            res.write(evt.delta.text);
+          }
+        } catch {
+          // malformed SSE line — skip
+        }
       }
     }
 
