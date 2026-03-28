@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { teamLogoUrl } from '../styles/tokens';
 import { AppShell, C, GLOBAL_CSS, TabBar, Badge } from '../components/AppShell';
+import { useDraftStore } from '../store/draftStore';
 
 type DivisionTab =
   | 'ALL'
@@ -662,8 +664,20 @@ function TeamSelectPageInner({ draftStore, onStart }: TeamSelectPageProps) {
   );
 }
 
-export default function TeamSelectPage(props: TeamSelectPageProps) {
-  return <TeamSelectPageInner {...props} />;
+export function TeamSelectPage(props: TeamSelectPageProps) {
+  const navigate = useNavigate();
+  const { startDraft } = useDraftStore();
+
+  const handleStart = (team: Team) => {
+    if (props.onStart) {
+      props.onStart(team);
+    } else {
+      startDraft(team.abbreviation.toLowerCase());
+      navigate('/draft/board');
+    }
+  };
+
+  return <TeamSelectPageInner {...props} onStart={handleStart} />;
 }
 
-export { TeamSelectPage };
+export default TeamSelectPage;
